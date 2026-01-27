@@ -129,7 +129,7 @@
 \usepackage{tabularray}
 \UseTblrLibrary{booktabs}
 \usepackage{siunitx}
-
+\sisetup{detect-all} % optional, but tends to behave nicely with fonts
 
 % Encoding & Fonts
 \usepackage[utf8]{inputenc}
@@ -151,6 +151,10 @@
 \usepackage{subcaption}
 \usepackage{comment} 
 
+\makeatletter
+\providecommand\absfont{\small}
+\makeatother
+
 % Hyperlinks
 \usepackage[colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue]{hyperref}
 
@@ -169,16 +173,6 @@ Can AI Digital Twins Bridge the Partisan Insight Gap?}
 }
 
 \date{\today}
-\usepackage{float}
-\usepackage{tabularray}
-\usepackage[normalem]{ulem}
-\usepackage{graphicx}
-\usepackage{rotating}
-\UseTblrLibrary{booktabs}
-\UseTblrLibrary{siunitx}
-\NewTableCommand{\tinytableDefineColor}[3]{\definecolor{#1}{#2}{#3}}
-\newcommand{\tinytableTabularrayUnderline}[1]{\underline{#1}}
-\newcommand{\tinytableTabularrayStrikeout}[1]{\sout{#1}}
 \usepackage{booktabs}
 \usepackage{caption}
 \usepackage{longtable}
@@ -247,7 +241,7 @@ Can AI Digital Twins Bridge the Partisan Insight Gap?}
 across the political divide by interacting with AI}
 \author{Benjamin Lira \and Noah Castelo \and Olivier Toubia \and Stefano
 Puntoni}
-\date{2025-12-19}
+\date{2025-12-21}
 
 \begin{document}
 \maketitle
@@ -984,8 +978,10 @@ it?}\label{does-confidence-track-accuracyor-diverge-from-it}
 We examine participants' metacognitive awareness by testing (1) whether
 confidence changes from pre to post, (2) The relationship between
 accuracy and confidence, and (3) whether confidence changes track with
-actual accuracy improvements. \#\#\#\# Does confidence change
-pre-to-post?
+actual accuracy improvements.
+
+\paragraph{Does confidence change
+pre-to-post?}\label{does-confidence-change-pre-to-post}
 
 Republicans learning about Democrats gained confidence after the
 interaction (\emph{b} = 0.306, \emph{d} = -0.30, \emph{p} \textless{}

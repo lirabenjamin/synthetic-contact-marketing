@@ -38,6 +38,17 @@ Help implement analysis and writing in a reproducible way.
 
 ## Project data
 - title: Learning from Twins: Can marketers learn about consumers across the political divide by interacting with AI
-- abstract: None yet
+- abstract
+Political polarization poses a fundamental challenge for marketers who must communicate effectively with ideologically diverse consumers. 
+  Misperceptions about political outgroups—where partisans hold exaggerated and inaccurate views of those across the political divide—can undermine marketing strategies targeting broad consumer bases. This study tests whether brief interactions with an AI chatbot representing a political outgroup can improve marketers' understanding of that outgroup and reduce affective polarization. 
+  Participants interacted with a chatbot prompted to represent their political outgroup and responded to questions about environmental attitudes before and after the interaction. 
+  Results demonstrate that chatbot interactions significantly improved both belief accuracy and warmth toward the outgroup. 
+  However, these effects were asymmetric: Democrats learning about Republicans showed substantially greater accuracy improvements than Republicans learning about Democrats, though both groups increased warmth at similar rates. 
+  Political extremism predicted greater baseline bias and lower warmth but did not moderate the intervention's effectiveness, indicating that both moderate and extreme partisans benefited equally. 
+  Bot informativeness predicted better outcomes, while perceived empathy did not. 
+  These findings suggest AI-mediated interactions offer a scalable tool for reducing political misperceptions in consumer research, though important questions remain about domain specificity, temporal durability, and how insights from AI interactions transfer to understanding actual outgroup members.
 - stage: Pilot
 - journal target: Journal of Marketing, JCR
+
+## Paper summarization procedure
+Given my goals with this research, can you read each of the pdfs in lit, and generate a detailed summary for each in the lit folder? If there are multiple studies, make sure to explain each. Give this to me as an md file i can download.

@@ -1,10 +1,12 @@
 ---
-title: "Learning from Twins"
-subtitle: "Can marketers learn about consumers across the political divide by interacting with AI?"
-author: "Benjamin Lira"
+title: "Learning from AI Twins"
+subtitle: "Can marketers learn about consumers across the political divide?"
+author: "Benjamin Lira, Noah Castelo, Olivier Toubia, Stefano Puntoni"
 date: today
+bibliography: '../lit/references.bib'
 format:
   beamer:
+    incremental: true
     theme: default
     colortheme: default
     fonttheme: default
@@ -21,27 +23,37 @@ execute:
 library(tidyverse)
 library(arrow)
 library(lme4)
+library(lmerTest)
 library(ggplot2)
 library(broom)
 library(patchwork)
+library(emmeans)
+library(effectsize)
+library(ggpubr)
 
 # Load data
-# switch for data load.
 is_running_in_quarto <- function() {
-  # Check if a Quarto-specific environment variable is set
   return(Sys.getenv("QUARTO_DOCUMENT_PATH") != "")
 }
 
-# Example usage:
 if (is_running_in_quarto()) {
-  dat <- read_parquet("../data/processed/cleaned_data.parquet")
+  dat <- read_parquet("../data/processed/analysis_data.parquet")
 } else {
- dat <- read_parquet("./data/processed/cleaned_data.parquet")
+  dat <- read_parquet("./data/processed/analysis_data.parquet")
 }
 
 # Colors
 party_colors <- c("Democrat" = "#0015BC", "Republican" = "#E81B23")
-learner_party_colors <- c("D→R" = "#0015BC", "R→D" = "#E81B23")
+learner_party_colors <- c("D->R" = "#0015BC", "R->D" = "#E81B23")
+extremism_colors <- c("High Extremism" = "#FF8C00", "Low Extremism" = "#20B2AA")
+
+# Fix arrow encoding in data
+dat <- dat %>%
+  mutate(learner_party = case_when(
+    learner_party == "D→R" ~ "D->R",
+    learner_party == "R→D" ~ "R->D",
+    TRUE ~ learner_party
+  ))
 
 # Prepare long data
 accuracy_long <- dat %>%
@@ -55,246 +67,709 @@ warmth_long <- dat %>%
   pivot_longer(cols = c(warmth_outgroup_pre, warmth_outgroup_post), names_to = "time",
                names_pattern = "warmth_outgroup_(pre|post)", values_to = "warmth") %>%
   mutate(time = factor(time, levels = c("pre", "post")))
+
+# Sample sizes
+n_dr <- dat %>% filter(learner_party == "D->R") %>% nrow()
+n_rd <- dat %>% filter(learner_party == "R->D") %>% nrow()
 ```
 
-# Motivation
+# Introduction
 
-## The Problem
+## Paper Strategy
 
-\begin{columns}[T]
-\begin{column}{0.5\textwidth}
-\textbf{Political polarization is high}
-\begin{itemize}
-\item Marketers face ideologically diverse consumers
-\item Partisan misperceptions are widespread
-\item Can lead to ineffective marketing
-\end{itemize}
-\end{column}
+\begin{center}
+\Large
+Two-paper plan
+\end{center}
 
-\begin{column}{0.5\textwidth}
-\textbf{Our approach}
-\begin{itemize}
-\item Can AI chatbots reduce bias?
-\item Focus: environmental attitudes
-\item N = `r nrow(dat)` participants
-\end{itemize}
-\end{column}
-\end{columns}
+\vspace{2em}
 
-## Research Questions
-
-1. Do people update beliefs after chatbot interaction?
-2. Is updating symmetric across political groups?
-3. Do extreme partisans benefit equally?
-
-# Results
-
-## Baseline Bias
-
-```{r bias-plot, fig.height=4, fig.width=7}
-prelim_data <- dat %>%
-  select(learner_party, participant_party, green_own, green_ingroup, green_outgroup_pre) %>%
-  pivot_longer(cols = c(green_own, green_ingroup, green_outgroup_pre),
-               names_to = "measure_type", values_to = "value") %>%
-  mutate(
-    measure_type = factor(measure_type,
-                          levels = c("green_own", "green_ingroup", "green_outgroup_pre"),
-                          labels = c("Own Attitudes", "Ingroup Perception", "Outgroup Perception")),
-    participant_party = factor(participant_party, levels = c("Democrat", "Republican"))
-  )
-
-ggplot(prelim_data, aes(x = participant_party, y = value, fill = participant_party)) +
-  stat_summary(fun = mean, geom = "bar", alpha = 0.8) +
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
-  facet_wrap(~measure_type, ncol = 3) +
-  scale_fill_manual(values = party_colors) +
-  labs(x = NULL, y = "Green Attitude (1-5)") +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none", strip.text = element_text(face = "bold"))
-```
-
-\vspace{0.5em}
-\small The perceived gap is much larger than the actual gap.
-
-## Main Effects: Pre to Post
-
-```{r main-effects, fig.height=4.5, fig.width=8}
-# Calculate summaries
-accuracy_summary <- accuracy_long %>%
-  group_by(learner_party, time) %>%
-  summarise(mean_error = mean(error, na.rm = TRUE),
-            se_error = sd(error, na.rm = TRUE) / sqrt(n()),
-            .groups = "drop")
-
-warmth_summary <- warmth_long %>%
-  group_by(learner_party, time) %>%
-  summarise(mean_warmth = mean(warmth, na.rm = TRUE),
-            se_warmth = sd(warmth, na.rm = TRUE) / sqrt(n()),
-            .groups = "drop")
-
-# Plots
-p_acc <- ggplot(accuracy_summary, aes(x = time, y = mean_error, color = learner_party, group = learner_party)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_error - se_error, ymax = mean_error + se_error), width = 0.1) +
-  scale_color_manual(values = learner_party_colors, name = NULL) +
-  labs(title = "Belief Accuracy", x = NULL, y = "Error (lower = better)") +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
-
-p_warmth <- ggplot(warmth_summary, aes(x = time, y = mean_warmth, color = learner_party, group = learner_party)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_warmth - se_warmth, ymax = mean_warmth + se_warmth), width = 0.1) +
-  scale_color_manual(values = learner_party_colors, name = NULL) +
-  labs(title = "Outgroup Warmth", x = NULL, y = "Feeling Thermometer") +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
-
-p_acc + p_warmth + plot_layout(guides = "collect") & theme(legend.position = "bottom")
-```
-
-## Asymmetric Effects
-
-```{r models}
-accuracy_model <- lmer(error ~ time * learner_party + (1 | ResponseId), data = accuracy_long)
-warmth_model <- lmer(warmth ~ time * learner_party + (1 | ResponseId), data = warmth_long)
-
-library(emmeans)
-accuracy_contrasts <- emmeans(accuracy_model, ~ time | learner_party) %>%
-  contrast("pairwise") %>%
-  tidy()
-
-acc_dr_est <- abs(accuracy_contrasts$estimate[1])
-acc_rd_est <- abs(accuracy_contrasts$estimate[2])
-```
-
-\begin{columns}[T]
-\begin{column}{0.5\textwidth}
-\textbf{Accuracy}
-\begin{itemize}
-\item Democrats learning about Republicans: \textbf{`r sprintf("%.2f", acc_dr_est)`} point improvement***
-\item Republicans learning about Democrats: \textbf{`r sprintf("%.2f", acc_rd_est)`} point improvement***
-\item Democrats show larger gains
-\end{itemize}
-\end{column}
-
-\begin{column}{0.5\textwidth}
-\textbf{Warmth}
-\begin{itemize}
-\item Both groups increase warmth
-\item No significant difference
-\item ~4-5 degree increase on 100-point scale
-\end{itemize}
-\end{column}
-\end{columns}
-
-## Political Extremism
-
-```{r extremism}
-library(lmerTest)
-accuracy_long_ext <- accuracy_long %>%
-  left_join(dat %>% select(ResponseId, political_extremism), by = "ResponseId")
-
-accuracy_extremism_model <- lmer(
-  error ~ time * learner_party * political_extremism + (1 | ResponseId),
-  data = accuracy_long_ext
-)
-
-baseline_accuracy_extremism <- lm(accuracy_pre ~ political_extremism, data = dat)
-extremism_acc_baseline_b <- coef(baseline_accuracy_extremism)["political_extremism"]
-extremism_3way_acc_p <- coef(summary(accuracy_extremism_model))["timepost:learner_partyR→D:political_extremism", "Pr(>|t|)"]
-```
-
-\textbf{Baseline:} More extreme partisans have greater bias (*b* = `r sprintf("%.3f", extremism_acc_baseline_b)`, *p* < .001)
+\begin{enumerate}
+\item \textbf{General science paper first:} Focus on synthetic contact as a tool for reducing political misperceptions and affective polarization
 
 \vspace{1em}
 
-\textbf{Intervention:} Political extremism does NOT moderate the effect (*p* = `r sprintf("%.3f", extremism_3way_acc_p)`)
+\item \textbf{Marketing-specific paper second:} Apply insights to consumer research and cross-partisan market understanding
+\end{enumerate}
+
+## Goals for Today
+
+\begin{center}
+\Large
+Feedback for today
+\end{center}
+
+\vspace{1.5em}
+
+\begin{enumerate}
+\item Feedback on \textbf{framing}
+
+\vspace{0.5em}
+
+\item Feedback on \textbf{analyses} of Study 1.
+
+\vspace{0.5em}
+
+\item \textbf{Most important:} Feedback on \textbf{next study to run}
+\end{enumerate}
+
+# The Challenge
+
+## A Fragmented Society
+
+\begin{center}
+\Large
+Political polarization is at historic highs
+\end{center}
+
+\vspace{1em}
+
+\begin{itemize}
+\item Americans increasingly live in ideological bubbles
+\item Cross-partisan friendships are declining
+\item Media consumption is siloed by political identity
+\item Partisans see each other as enemies, not fellow citizens
+\end{itemize}
 
 \vspace{1em}
 
 \begin{center}
-\Large
-\textbf{Even highly polarized individuals can learn from AI}
+\textbf{For marketers:} How do you understand consumers you never interact with?
 \end{center}
 
-## What Predicts Learning?
+## Contact Theory: A Classic Solution
 
-```{r process}
+\textbf{Allport (1954): Intergroup contact reduces prejudice}
+
+\vspace{0.5em}
+
+\begin{itemize}
+\item Meeting outgroup members corrects stereotypes
+\item Builds empathy through personal connection
+\item Humanizes "the other side"
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{Meta-analyses confirm robust effects}
+\begin{itemize}
+\item Pettigrew \& Tropp (2006): 500+ studies
+\item Contact $\rightarrow$ reduced prejudice
+\end{itemize}
+
+## But Intergroup Contact Is Fraught
+
+\begin{center}
+\Large
+Three problems with real-world contact
+\end{center}
+
+\vspace{1em}
+
+\begin{columns}[T]
+\begin{column}{0.33\textwidth}
+\textbf{1. It's rare}
+\begin{itemize}
+\item Geographic sorting
+\item Social media bubbles
+\item Self-selection
+\end{itemize}
+\end{column}
+
+\begin{column}{0.33\textwidth}
+\textbf{2. It can backfire}
+\begin{itemize}
+\item Hostile encounters
+\item Confirmation of stereotypes
+\item Anxiety and avoidance
+\end{itemize}
+\end{column}
+
+\begin{column}{0.33\textwidth}
+\textbf{3. It's costly}
+\begin{itemize}
+\item Time and logistics
+\item Emotional labor
+\item Not scalable
+\end{itemize}
+\end{column}
+\end{columns}
+
+## Computers as Social Actors
+
+\begin{center}
+\Large
+People treat computers like people
+\end{center}
+
+\vspace{1em}
+
+\textbf{Nass \& Reeves (1996): The Media Equation}
+\begin{itemize}
+\item People apply social rules to machines
+\item Politeness, reciprocity, personality attribution
+\item Even when they know it's "just a computer"
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{With modern AI:}
+\begin{itemize}
+\item LLMs can simulate authentic conversations
+\item Chatbots can represent diverse perspectives
+\item Opens new possibilities for "synthetic" social contact
+\end{itemize}
+
+## Synthetic Contact: Does It Work?
+
+\begin{center}
+\Large
+\textbf{Research Question}
+\end{center}
+
+\vspace{1em}
+
+\begin{center}
+Can brief interactions with an AI chatbot\\
+representing a political outgroup\\
+improve understanding and reduce prejudice?
+\end{center}
+
+\vspace{2em}
+
+\begin{center}
+\textit{Hermann et al. (2025): Synthetic contact shows promise...\\
+but questions remain about mechanisms and boundary conditions}
+\end{center}
+
+# The Pilot
+
+## Participants
+
+```{r political-dist, fig.height=3, fig.width=6}
+p <- dat %>%
+  ggplot(aes(politicalorientation_1)) +
+  geom_histogram(aes(fill = after_stat(x)), bins = 20) +
+  labs(x = 'Political Orientation\n(0 = Strong Democrat, 100 = Strong Republican)',
+       y = "Count",
+       title = paste0("N = ", nrow(dat), " participants (", n_dr, " Democrats, ", n_rd, " Republicans)")) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 11)) +
+  scale_fill_gradient2(low = party_colors["Democrat"],
+                       mid = "gray40",
+                       high = party_colors["Republican"],
+                       midpoint = 50)
+p
+```
+
+\small
+Recruited via Qualtrics panels. Prescreened with partisanship filter.
+
+## The Perception Wedge
+
+```{r perception-wedge, fig.height=3.5, fig.width=9}
+# Panel 1: Republicans - actual vs. perceived by Democrats
+rep_actual <- dat %>% filter(participant_party == "Republican") %>% pull(green_own)
+rep_perceived <- dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre)
+
+# Calculate effect size for Democrats' misperception of Republicans
+dem_outgroup_actual <- mean(rep_actual)
+dem_outgroup_perceived <- mean(rep_perceived)
+dem_outgroup_d <- (dem_outgroup_perceived - dem_outgroup_actual) / sd(rep_perceived)
+
+rep_data <- tibble(
+  value = c(rep_actual, rep_perceived),
+  measure = rep(c("Actual", "Perceived by Democrats"), c(length(rep_actual), length(rep_perceived)))
+)
+
+p1 <- ggplot(rep_data, aes(x = value, linetype = measure)) +
+  geom_density(color = party_colors["Republican"], fill = party_colors["Republican"],
+               alpha = 0.2, linewidth = 1) +
+  scale_linetype_manual(values = c("solid", "dashed"), name = NULL) +
+  labs(x = "Green Attitudes (1-5)", y = "Density",
+       title = paste0("Republicans (d = ", sprintf("%.2f", dem_outgroup_d), ")")) +
+  theme_minimal(base_size = 12) +
+  annotate(geom = 'text', x = c(3.5, 1.8), y = .55, label = c("Actual", "Perceived"), size = 3.5) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# Panel 2: Democrats - actual vs. perceived by Republicans
+dem_actual <- dat %>% filter(participant_party == "Democrat") %>% pull(green_own)
+dem_perceived <- dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre)
+
+# Calculate effect size for Republicans' misperception of Democrats
+rep_outgroup_actual <- mean(dem_actual)
+rep_outgroup_perceived <- mean(dem_perceived)
+rep_outgroup_d <- (rep_outgroup_perceived - rep_outgroup_actual) / sd(dem_perceived)
+
+dem_data <- tibble(
+  value = c(dem_actual, dem_perceived),
+  measure = rep(c("Actual", "Perceived by Republicans"), c(length(dem_actual), length(dem_perceived)))
+)
+
+p2 <- ggplot(dem_data, aes(x = value, linetype = measure)) +
+  geom_density(color = party_colors["Democrat"], fill = party_colors["Democrat"],
+               alpha = 0.2, linewidth = 1) +
+  scale_linetype_manual(values = c("solid", "dashed"), name = NULL) +
+  labs(x = "Green Attitudes (1-5)", y = "Density",
+       title = paste0("Democrats (d = ", sprintf("%.2f", rep_outgroup_d), ")")) +
+  theme_minimal(base_size = 12) +
+  annotate(geom = 'text', x = c(4.2, 3.8), y = c(.6, .45), label = c("Actual", "Perceived"), size = 3.5) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+p1 + p2
+```
+
+\begin{center}
+Both groups underestimate outgroup's environmental concern---but Democrats' error is far larger
+\end{center}
+
+## Baseline Bias
+
+```{r bias-distribution, fig.height=3, fig.width=6}
+# Calculate effect size for baseline accuracy difference between parties
+baseline_acc_d <- cohens_d(accuracy_pre ~ participant_party, data = dat, pooled_sd = FALSE)$Cohens_d
+
+dat %>%
+  ggplot(aes(x = accuracy_pre, fill = participant_party)) +
+  geom_density(color = NA, alpha = 0.6) +
+  scale_fill_manual(values = party_colors, name = NULL) +
+  labs(x = "Baseline Accuracy (higher = more accurate)", y = "Density",
+       title = paste0("Democrats are less accurate than Republicans (d = ", sprintf("%.2f", baseline_acc_d), ")")) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+\small
+Accuracy = negative absolute difference between perceived and actual outgroup attitudes.
+
+## Baseline Warmth
+
+```{r baseline-warmth, fig.height=3, fig.width=5}
+warmth_baseline <- dat %>%
+  select(participant_party, warmth_outgroup_pre) %>%
+  group_by(participant_party) %>%
+  summarise(
+    mean_warmth = mean(warmth_outgroup_pre, na.rm = TRUE),
+    se_warmth = sd(warmth_outgroup_pre, na.rm = TRUE) / sqrt(n())
+  )
+
+ggplot(warmth_baseline, aes(x = participant_party, y = mean_warmth, fill = participant_party)) +
+  geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +
+  geom_errorbar(aes(ymin = mean_warmth - se_warmth, ymax = mean_warmth + se_warmth), width = 0.2) +
+  scale_fill_manual(values = party_colors) +
+  labs(x = NULL, y = "Warmth Toward Outgroup (0-100)",
+       title = "Baseline Affective Polarization") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold")) +
+  ylim(0, 100)
+```
+
+## The Intervention: 10-Minute AI Conversation
+
+\begin{center}
+\includegraphics[height=0.65\textheight]{../materials/qualtrics/screenshots/chatbot.png}
+
+\small
+Participants had a 10-minute conversation with an AI chatbot representing their political outgroup's perspective on environmental issues.
+\end{center}
+
+
+# Results
+
+## Main Finding: Accuracy and Warmth Both Improved
+
+```{r main-effects, fig.height=3.5, fig.width=9}
+# Calculate summaries
+accuracy_summary <- accuracy_long %>%
+  group_by(time) %>%
+  summarise(mean_val = mean(error, na.rm = TRUE),
+            se_val = sd(error, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+warmth_summary <- warmth_long %>%
+  group_by(time) %>%
+  summarise(mean_val = mean(warmth, na.rm = TRUE),
+            se_val = sd(warmth, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+# Main effect models
+accuracy_model0 <- lmer(error ~ time + (1 | ResponseId), data = accuracy_long)
+warmth_model0 <- lmer(warmth ~ time + (1 | ResponseId), data = warmth_long)
+
+acc_d <- -cohens_d(error ~ time, data = accuracy_long, pooled_sd = FALSE)$Cohens_d
+warmth_d <- cohens_d(warmth ~ time, data = warmth_long, pooled_sd = FALSE)$Cohens_d
+
+p_acc <- ggplot(accuracy_summary, aes(x = time, y = mean_val)) +
+  geom_line(group = 1, linewidth = 1.5, color = "gray30") +
+  geom_point(size = 5, color = "gray30") +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1, color = "gray30") +
+  labs(title = paste0("Belief Accuracy (d = ", sprintf("%.2f", acc_d), ")"),
+       x = NULL, y = "Accuracy\n(higher = more accurate)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_warmth <- ggplot(warmth_summary, aes(x = time, y = mean_val)) +
+  geom_line(group = 1, linewidth = 1.5, color = "gray30") +
+  geom_point(size = 5, color = "gray30") +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1, color = "gray30") +
+  labs(title = paste0("Outgroup Warmth (d = ", sprintf("%.2f", warmth_d), ")"),
+       x = NULL, y = "Feeling Thermometer (0-100)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_acc + p_warmth
+```
+
+\begin{center}
+\textbf{Brief AI conversations improved both accuracy and warmth}
+\end{center}
+
+## Breaking Down by Party
+
+```{r by-party, fig.height=3.5, fig.width=9}
+# Calculate summaries by party
+accuracy_summary_party <- accuracy_long %>%
+  group_by(learner_party, time) %>%
+  summarise(mean_val = mean(error, na.rm = TRUE),
+            se_val = sd(error, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+warmth_summary_party <- warmth_long %>%
+  group_by(learner_party, time) %>%
+  summarise(mean_val = mean(warmth, na.rm = TRUE),
+            se_val = sd(warmth, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+# Models with interaction
+accuracy_model <- lmer(error ~ time * learner_party + (1 | ResponseId), data = accuracy_long)
+warmth_model <- lmer(warmth ~ time * learner_party + (1 | ResponseId), data = warmth_long)
+
+# Calculate effect sizes by party
+acc_dr_d <- -cohens_d(error ~ time, data = accuracy_long %>% filter(learner_party == "D->R"), pooled_sd = FALSE)$Cohens_d
+acc_rd_d <- -cohens_d(error ~ time, data = accuracy_long %>% filter(learner_party == "R->D"), pooled_sd = FALSE)$Cohens_d
+warmth_dr_d <- cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "D->R"), pooled_sd = FALSE)$Cohens_d
+warmth_rd_d <- cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "R->D"), pooled_sd = FALSE)$Cohens_d
+
+p_acc <- ggplot(accuracy_summary_party, aes(x = time, y = mean_val, color = learner_party, group = learner_party)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(title = paste0("Belief Accuracy\n(D->R: d=", sprintf("%.2f", acc_dr_d), ", R->D: d=", sprintf("%.2f", acc_rd_d), ")"),
+       x = NULL, y = "Accuracy (higher = better)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5, size = 10))
+
+p_warmth <- ggplot(warmth_summary_party, aes(x = time, y = mean_val, color = learner_party, group = learner_party)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(title = paste0("Outgroup Warmth\n(D->R: d=", sprintf("%.2f", warmth_dr_d), ", R->D: d=", sprintf("%.2f", warmth_rd_d), ")"),
+       x = NULL, y = "Feeling Thermometer (0-100)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5, size = 10))
+
+p_acc + p_warmth + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+```
+
+\small
+Democrats (D->R) showed larger accuracy gains; warmth increased similarly for both groups.
+
+## Change in Accuracy Correlates with Change in Warmth
+
+```{r acc-warmth-corr, fig.height=3, fig.width=5}
+dat_with_changes <- dat %>%
+  mutate(
+    accuracy_change = accuracy_post - accuracy_pre,
+    warmth_change = warmth_outgroup_post - warmth_outgroup_pre
+  )
+
+ggplot(dat_with_changes, aes(x = accuracy_change, y = warmth_change, color = learner_party)) +
+  geom_point(alpha = 0.3, size = 2, show.legend = FALSE) +
+  geom_smooth(method = "lm", se = TRUE, linewidth = 1, show.legend = F) +
+  stat_cor(aes(label = paste((..r.label..), ..p.label.., sep = "~`,`~")),
+           method = "pearson", show.legend = FALSE, size = 3) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  facet_wrap(~ learner_party) +
+  labs(x = "Accuracy Change (higher = improved)",
+       y = "Warmth Change (higher = warmer)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+## Does Political Extremity Moderate the Effect?
+
+```{r extremism, fig.height=3.5, fig.width=9}
+# Add extremism to long data
+accuracy_long_ext <- accuracy_long %>%
+  left_join(dat %>% select(ResponseId, political_extremism), by = "ResponseId")
+
+warmth_long_ext <- warmth_long %>%
+  left_join(dat %>% select(ResponseId, political_extremism), by = "ResponseId")
+
+# Median split for visualization
+extremism_median <- median(dat$political_extremism, na.rm = TRUE)
+
+accuracy_long_ext <- accuracy_long_ext %>%
+  mutate(extremism_group = ifelse(political_extremism > extremism_median, "High Extremism", "Low Extremism"))
+
+warmth_long_ext <- warmth_long_ext %>%
+  mutate(extremism_group = ifelse(political_extremism > extremism_median, "High Extremism", "Low Extremism"))
+
+# Summaries
+acc_ext_summary <- accuracy_long_ext %>%
+  group_by(extremism_group, time) %>%
+  summarise(mean_val = mean(error, na.rm = TRUE),
+            se_val = sd(error, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+warmth_ext_summary <- warmth_long_ext %>%
+  group_by(extremism_group, time) %>%
+  summarise(mean_val = mean(warmth, na.rm = TRUE),
+            se_val = sd(warmth, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+p_acc <- ggplot(acc_ext_summary, aes(x = time, y = mean_val, color = extremism_group, group = extremism_group)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
+  scale_color_manual(values = extremism_colors, name = NULL) +
+  labs(title = "Belief Accuracy", x = NULL, y = "Accuracy (higher = better)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_warmth <- ggplot(warmth_ext_summary, aes(x = time, y = mean_val, color = extremism_group, group = extremism_group)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
+  scale_color_manual(values = extremism_colors, name = NULL) +
+  labs(title = "Outgroup Warmth", x = NULL, y = "Feeling Thermometer (0-100)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_acc + p_warmth + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+```
+
+\begin{center}
+\textbf{No moderation:} Even highly polarized individuals benefit equally
+\end{center}
+
+## What Drives Learning? Empathy vs. Informativeness
+
+```{r empathy-info, fig.height=3.5, fig.width=9}
 dat_for_reg <- dat %>%
   filter(!is.na(accuracy_pre), !is.na(accuracy_post),
          !is.na(warmth_outgroup_pre), !is.na(warmth_outgroup_post),
-         !is.na(info), !is.na(empathy))
+         !is.na(info), !is.na(empathy)) %>%
+  mutate(
+    accuracy_change = accuracy_post - accuracy_pre,
+    warmth_change = warmth_outgroup_post - warmth_outgroup_pre
+  )
 
-accuracy_process_model <- lm(accuracy_post ~ accuracy_pre + info + empathy, data = dat_for_reg)
+p1 <- ggplot(dat_for_reg, aes(x = info, y = accuracy_change, color = learner_party)) +
+  geom_jitter(alpha = 0.5, width = 0.2, height = 0, size = 1.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  stat_cor(size = 2.5) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(x = "Bot Informativeness (1-5)", y = "Accuracy Change",
+       title = "Informativeness") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "none", plot.title = element_text(face = "bold", hjust = 0.5))
 
-info_acc_b <- coef(accuracy_process_model)["info"]
-info_acc_p <- summary(accuracy_process_model)$coefficients["info", "Pr(>|t|)"]
+p2 <- ggplot(dat_for_reg, aes(x = empathy, y = accuracy_change, color = learner_party)) +
+  geom_jitter(alpha = 0.5, width = 0.2, height = 0, size = 1.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  stat_cor(size = 2.5) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(x = "Bot Empathy (1-5)", y = "Accuracy Change",
+       title = "Empathy") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5))
+
+p1 + p2 + plot_layout(guides = "collect") & theme(legend.position = "bottom")
 ```
 
-\textbf{Bot Informativeness} predicts better accuracy (*b* = `r sprintf("%.3f", info_acc_b)`, *p* = `r sprintf("%.3f", info_acc_p)`)
+\begin{center}
+\textbf{Informativeness matters; empathy does not}
+\end{center}
 
-\vspace{1em}
+## Does Engagement (Dose) Matter?
 
-\textbf{Bot Empathy} does NOT predict outcomes
+```{r dose, fig.height=3.5, fig.width=5}
+dat_filtered <- dat_for_reg %>%
+  mutate(log_word_count = log(user_word_count)) %>%
+  filter(user_turn_count <= 75)
 
-\vspace{1em}
+ggplot(dat_filtered, aes(x = log_word_count, y = accuracy_change, color = learner_party)) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  stat_cor(size = 3) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(x = "Log(Word Count)", y = "Accuracy Change\n(higher = improved)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
 
-\textbf{Engagement} (word count, turns) shows mixed results
+\small
+Mixed results: More engagement associated with accuracy gains only for Democrats.
 
-# Discussion
+## Confidence Changes
+
+```{r confidence, fig.height=3.5, fig.width=5}
+confidence_long <- dat %>%
+  select(ResponseId, learner_party, confidence_outgroup_pre, confidence_outgroup_post) %>%
+  pivot_longer(cols = c(confidence_outgroup_pre, confidence_outgroup_post),
+               names_to = "time", names_pattern = "confidence_outgroup_(pre|post)",
+               values_to = "confidence") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+confidence_summary <- confidence_long %>%
+  group_by(learner_party, time) %>%
+  summarise(mean_conf = mean(confidence, na.rm = TRUE),
+            se_conf = sd(confidence, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+ggplot(confidence_summary, aes(x = time, y = mean_conf, color = learner_party, group = learner_party)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_conf - se_conf, ymax = mean_conf + se_conf), width = 0.1) +
+  scale_color_manual(values = learner_party_colors, name = NULL) +
+  labs(x = NULL, y = "Confidence in Outgroup Judgments (1-5)") +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+
+\small
+Republicans gained confidence despite smaller accuracy gains. Democrats' confidence unchanged.
+
+# Takeaways
 
 ## Key Findings
 
-1. \textbf{AI chatbots can reduce partisan bias} — participants became more accurate and warmer
+\begin{enumerate}
+\item \textbf{Synthetic contact works:} Brief AI conversations improved accuracy and warmth
 
-2. \textbf{Effects are asymmetric} — Democrats showed larger accuracy gains
+\vspace{0.5em}
 
-3. \textbf{Works across extremism levels} — even highly polarized individuals benefit
+\item \textbf{Asymmetric learning:} Democrats showed larger accuracy gains; warmth increased symmetrically
 
-4. \textbf{Informativeness matters} — perceived quality of information predicts learning
+\vspace{0.5em}
 
-## Limitations & Future Directions
+\item \textbf{Extremists benefit too:} Political extremism did not moderate intervention effectiveness
 
-\textbf{Domain specificity}
+\vspace{0.5em}
+
+\item \textbf{Information > empathy:} Perceived informativeness predicted outcomes; empathy did not
+
+\vspace{0.5em}
+
+\item \textbf{Metacognitive mismatch:} Confidence changes did not track accuracy improvements
+\end{enumerate}
+
+## Implications
+
+\textbf{For marketers:}
 \begin{itemize}
-\item Environmental attitudes may differ from other domains
-\end{itemize}
-
-\textbf{Temporal dynamics}
-\begin{itemize}
-\item Only immediate effects; durability unknown
-\end{itemize}
-
-\textbf{AI vs. reality}
-\begin{itemize}
-\item Does learning from AI transfer to real people?
-\end{itemize}
-
-\textbf{Need comparisons}
-\begin{itemize}
-\item How does this compare to perspective-taking, information search, etc.?
-\end{itemize}
-
-## Implications for Practice
-
-\textbf{Scalable tool for marketers}
-\begin{itemize}
-\item Cheaper than focus groups
-\item Accessible way to understand diverse consumers
+\item Scalable alternative to focus groups for understanding diverse consumers
+\item Particularly valuable for cross-partisan product positioning
+\item AI can help bridge the political divide in consumer insights
 \end{itemize}
 
 \vspace{1em}
 
-\textbf{Particularly valuable for}
+\textbf{For researchers:}
 \begin{itemize}
-\item Cross-partisan messaging
-\item Environmental/sustainable products
-\item Understanding outgroup preferences
+\item Synthetic contact offers new paradigm for reducing intergroup bias
+\item Information provision may matter more than emotional connection
+\item Metacognitive calibration remains a challenge
 \end{itemize}
 
-# Thank You
+# Next Steps
+
+## Main Study Design
+
+\textbf{Address key pilot limitations with controlled experiment}
+
+\vspace{0.5em}
+
+\textbf{4-Condition Design (run for both D→R and R→D):}
+\begin{enumerate}
+\item AI Chatbot (replication)
+\item Google Search (practical alternative)
+\item Perspective-Taking (gold standard; Wang et al., 2014)
+\item Cats/Dogs AI chat (engagement-matched control)
+\end{enumerate}
+
+\vspace{0.5em}
+
+\textbf{Sample:} N = 2,000 (250 per cell × 8 cells)
+
+## What We Add
+
+\textbf{1. Control conditions}
+\begin{itemize}
+\item Google: Practical alternative (but search bias, info quality, effort differ)
+\item Perspective-taking: How does AI compare to established intervention?
+\item Cats/dogs: Controls for time, engagement, repeated measurement
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{2. Longitudinal follow-up}
+\begin{itemize}
+\item 1-week post-intervention
+\item Test durability of accuracy and warmth gains
+\item Critical gap: pilot showed immediate effects only
+\end{itemize}
+
+## What We Add (cont.)
+
+\textbf{3. Behavioral consequences}
+\begin{itemize}
+\item \textbf{Conversation willingness}: "How likely would you be to start a conversation with [outgroup] about political issues?" (1-7)
+\item \textbf{Partner preference}: "If given opportunity for a conversation about current events, who would you prefer to speak with?" (Dem/Rep/No preference)
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{Tests:} Does learning translate to engagement readiness?
+
+## Research Questions
+
+\begin{enumerate}
+\item \textbf{Does AI work?} AI vs. cats/dogs control (replication with control)
+
+\vspace{0.5em}
+
+\item \textbf{How does AI compare?} AI vs. Google vs. Perspective-taking
+
+\vspace{0.5em}
+
+\item \textbf{What mechanisms matter?}
+  \begin{itemize}
+  \item Compare intervention types (exploratory on mechanism)
+  \item Google: self-directed search (confounded by search bias, effort)
+  \item PT: structured empathy exercise
+  \item AI: guided dialogue
+  \end{itemize}
+
+\vspace{0.5em}
+
+\item \textbf{Does it last?} Compare immediate vs. 1-week follow-up
+
+\vspace{0.5em}
+
+\item \textbf{Does it change behavior?} Accuracy/warmth → conversation willingness → partner choice
+\end{enumerate}
 
 ## Questions?
 
@@ -306,104 +781,9 @@ Benjamin Lira
 
 \normalsize
 \texttt{blira@wharton.upenn.edu}
+
+\vspace{2em}
+
+\small
+with Noah Castelo, Olivier Toubia, Stefano Puntoni
 \end{center}
-
-# Appendix
-
-## Summary: All Regressions {.allowframebreaks}
-
-
-
-```{r all-models}
-library(modelsummary)
-
-warmth_model0 <- lmer(warmth ~ time  + (1 | ResponseId), data = warmth_long)
-accuracy_model0 <- lmer(error ~ time  + (1 | ResponseId), data = accuracy_long)
-
-warmth_extremism_model <- lmer(
-  warmth ~ time * learner_party * political_extremism + (1 | ResponseId),
-  data = accuracy_long_ext %>%
-    left_join(dat %>% select(ResponseId, warmth_outgroup_pre, warmth_outgroup_post), by = "ResponseId") %>%
-    select(ResponseId, learner_party, political_extremism) %>%
-    left_join(warmth_long, by = c("ResponseId", "learner_party"))
-)
-
-warmth_process_model <- lm(warmth_outgroup_post ~ warmth_outgroup_pre + info + empathy, data = dat_for_reg)
-
-dat <- dat %>%
-  mutate(
-    accuracy_change = accuracy_post - accuracy_pre,
-    warmth_change = warmth_outgroup_post - warmth_outgroup_pre,
-    log_word_count = log(user_word_count)
-  )
-
-m_accuracy_turns <- lm(accuracy_change ~ user_turn_count + accuracy_pre + learner_party, data = dat)
-m_warmth_turns <- lm(warmth_change ~ user_turn_count + warmth_outgroup_pre + learner_party, data = dat)
-
-modelsummary(
-  list(
-    "Accuracy (ME)" = accuracy_model0,
-    "Accuracy (Int)" = accuracy_model,
-    "Accuracy (Ext)" = accuracy_extremism_model,
-    "Warmth (ME)" = warmth_model0,
-    "Warmth (Int)" = warmth_model,
-    "Warmth (Ext)" = warmth_extremism_model
-  ),
-  stars = TRUE,
-  gof_map = c("nobs"),
-  coef_omit = "Intercept",
-  coef_map = c(
-    "timepost" = "Time (Post)",
-    "learner_partyR→D" = "Learner Party (R→D)",
-    "political_extremism" = "Political Extremism",
-    "timepost:learner_partyR→D" = "Time × Learner Party",
-    "timepost:political_extremism" = "Time × Extremism",
-    "learner_partyR→D:political_extremism" = "Party × Extremism",
-    "timepost:learner_partyR→D:political_extremism" = "Time × Party × Extremism"
-  ),
-  output = "tinytable"
-) %>%
-  tinytable::group_tt(j = list("Accuracy" = 2:4, "Warmth" = 5:7))%>% 
-  tinytable::style_tt(
-  fontsize = 0.5,
-  tabularray_inner = "rowsep=-2pt, colsep=3pt"
-)
-
-modelsummary(
-  list(
-    "Accuracy (ME)" = accuracy_model0,
-    "Accuracy (Int)" = accuracy_model,
-    "Accuracy (Ext)" = accuracy_extremism_model,
-    "Warmth (ME)" = warmth_model0,
-    "Warmth (Int)" = warmth_model,
-    "Warmth (Ext)" = warmth_extremism_model
-  ),
-  stars = TRUE,
-  gof_map = c("nobs"),
-  coef_omit = "Intercept",
-  fmt = fmt_statistic(estimate = 2, std.error = 2),
-  statistic = NULL,
-  # estimate = "{estimate}{stars}  ({std.error})",  # Put SE in parentheses on same line
-  estimate = "{estimate}{stars}",
-  coef_map = c(
-    "timepost" = "Time (Post)",
-    "learner_partyR→D" = "Learner Party (R→D)",
-    "political_extremism" = "Political Extremism",
-    "timepost:learner_partyR→D" = "Time × Learner Party",
-    "timepost:political_extremism" = "Time × Extremism",
-    "learner_partyR→D:political_extremism" = "Party × Extremism",
-    "timepost:learner_partyR→D:political_extremism" = "Time × Party × Extremism"
-  ),
-  output = "tinytable"
-) %>%
-  tinytable::group_tt(j = list("Accuracy" = 2:4, "Warmth" = 5:7)) %>% 
-    tinytable::style_tt(
-  fontsize = 0.5,
-  tabularray_inner = "rowsep=-2pt, colsep=3pt"
-) %>% 
-  tinytable::style_tt(j = 2:7, align = "d")
-
-
-
-```
-

@@ -1,7 +1,7 @@
 \usepackage{tabularray}
 \UseTblrLibrary{booktabs}
 \usepackage{siunitx}
-
+\sisetup{detect-all} % optional, but tends to behave nicely with fonts
 
 % Encoding & Fonts
 \usepackage[utf8]{inputenc}
@@ -22,6 +22,10 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{comment} 
+
+\makeatletter
+\providecommand\absfont{\small}
+\makeatother
 
 % Hyperlinks
 \usepackage[colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue]{hyperref}

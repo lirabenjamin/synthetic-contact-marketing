@@ -1,0 +1,30 @@
+\usepackage{tabularray}
+\UseTblrLibrary{booktabs}
+\usepackage{siunitx}
+\sisetup{detect-all}
+
+\makeatletter
+\providecommand{\theabstract}{}
+\providecommand{\@additionalelement}{} % IMPORTANT: fix maketitle crash
+\makeatother
+
+% DO NOT load enumerate (it conflicts with enumitem-ish stuff)
+% \usepackage{enumerate}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{comment}
+
+\makeatletter
+\providecommand\absfont{\small}
+\makeatother
+
+\makeatletter
+\renewenvironment{abstract}{%
+  \par\begingroup
+  \noindent{\bfseries Abstract. }\ignorespaces
+  \small
+}{%
+  \par\endgroup\par
+}
+\makeatother

@@ -1,5 +1,65 @@
 # Notes for Ben
 
+## 2026-01-15 16:15 - Main Study Design Proposal (Updated)
+
+Drafted comprehensive proposal for main study addressing pilot limitations. Updated after feedback to fix sample size, design description, and Google condition rationale.
+
+### Key Design Elements
+
+**4-Condition Design (run for both D→R and R→D):**
+- **Conditions** (4): AI Chatbot, Google Search, Perspective-Taking (Wang et al., 2014), Cats/Dogs control
+- **Directions**: Both Democrats learning about Republicans and Republicans learning about Democrats
+- **Sample**: N = 2,000 (250 per cell × 8 cells) - scaled from pilot's N=500 for simpler design
+
+**Control conditions rationale:**
+1. **Google**: Practical alternative (self-directed search), but confounded - search terms may be biased (Leung & Urminsky, 2025), information quality differs, different effort levels
+2. **Perspective-Taking**: Benchmarks against gold-standard psychology intervention (Wang et al., 2014) - structured empathy exercise
+3. **Cats/Dogs AI chat**: Controls for time, engagement, repeated measurement (neither info nor empathy about outgroup)
+
+**Longitudinal component:**
+- 1-week follow-up (consider 2 weeks in discussion with Stefano)
+- Re-measure accuracy, warmth, confidence
+- Tests durability of pilot effects (critical gap)
+
+**New behavioral DVs:**
+1. **Conversation willingness**: "How likely would you be to start a conversation with [outgroup] about political issues?" (1-7)
+2. **Partner preference**: "If given opportunity for conversation about current events, who would you prefer to speak with?" (Dem/Rep/No preference)
+- Hypothetical framing to avoid false expectations and protect follow-up retention
+- Tests whether learning translates to engagement willingness
+
+**What dropped:**
+- Marketing slogans → demoted to exploratory/secondary (doesn't fit general science angle as cleanly)
+
+### Research Questions
+
+1. Does AI work? (AI vs. cats/dogs control)
+2. How does AI compare? (AI vs. Google vs. PT)
+3. What mechanisms matter? (Exploratory comparison across intervention types - clean decomposition limited by confounds)
+4. Does it last? (immediate vs. 1-week)
+5. Does it change behavior? (accuracy/warmth → willingness → choice)
+
+### Major Discussion Points Added
+
+1. **Real human conversation condition**: Should we add 5th condition with actual cross-party humans? Expensive and logistically complex, but reviewers may want it. Include now or save for Study 3?
+2. **Sample size**: 2,000 total (250/cell) scales proportionally from pilot
+3. **Google caveat**: Not a clean "information-only" control due to search bias, info quality differences, and effort confounds
+
+### Files Created
+
+- **docs/main_study_proposal.md**: Full detailed proposal with rationale, procedure, analysis plan, discussion points for co-authors
+- **analysis/slides.qmd**: Added "Next Steps" section with 4 new slides covering design, additions, and research questions
+
+### Next Steps for Discussion
+
+1. Sample size confirmation (250/cell = 2,000 total, scaled from pilot)
+2. Real human conversation condition (5th condition? now or Study 3?)
+3. Follow-up timing (1 week vs. 2 weeks?)
+4. Venue strategy (general science vs. marketing vs. psychology journal)
+5. Budget estimate for 2,000-person study + follow-up (+ potential human condition)
+6. Timeline for data collection
+
+---
+
 ## 2025-12-19 18:30 - Pre-Submission Review and Fixes
 
 I conducted a comprehensive review of the report.qmd file and fixed all critical and most important issues before sending to coauthors.

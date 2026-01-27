@@ -1,6 +1,6 @@
 ---
 title: "Learning from AI Personas: Can marketers learn about consumers across the political divide by interacting with AI"
-author:
+author: 
   - name: Benjamin Lira
     affiliations:
       - Wharton School, University of Pennsylvania
@@ -43,7 +43,7 @@ format:
     keep-tex: true
     fig-cap-location: bottom
     tbl-cap-location: top
-    include-in-header: preamble.tex
+    include-in-header: preamble-latex.tex
     metadata:
       author: ""          # prevents Pandoc author injection in some setups
     toc: false
@@ -227,13 +227,36 @@ rep_ingroup_test <- t.test(
 )
 rep_ingroup_d <- (rep_ingroup_perceived - rep_ingroup_actual) / sd(dat %>% filter(participant_party == "Republican") %>% pull(green_ingroup))
 rep_ingroup_p <- rep_ingroup_test$p.value
+
+# OUTGROUP perception accuracy - Democrats evaluating Republicans
+# Compare Democrats' perception of Republicans to actual Republican attitudes
+dem_outgroup_actual <- dat %>% filter(participant_party == "Republican") %>% pull(green_own) %>% mean()
+dem_outgroup_perceived <- dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre) %>% mean()
+dem_outgroup_test <- t.test(
+  dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre),
+  mu = dem_outgroup_actual
+)
+dem_outgroup_d <- (dem_outgroup_perceived - dem_outgroup_actual) / sd(dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre))
+dem_outgroup_p <- dem_outgroup_test$p.value
+
+# OUTGROUP perception accuracy - Republicans evaluating Democrats
+# Compare Republicans' perception of Democrats to actual Democrat attitudes
+rep_outgroup_actual <- dat %>% filter(participant_party == "Democrat") %>% pull(green_own) %>% mean()
+rep_outgroup_perceived <- dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre) %>% mean()
+rep_outgroup_test <- t.test(
+  dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre),
+  mu = rep_outgroup_actual
+)
+rep_outgroup_d <- (rep_outgroup_perceived - rep_outgroup_actual) / sd(dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre))
+rep_outgroup_p <- rep_outgroup_test$p.value
 ```
 
 Participants systematically misperceived the environmental attitudes of their political opponents.
 Most participants held strong partisan identities, with the majority in the top and bottom quartiles of the political spectrum (@fig-political-orientation).
 Democrats rated themselves higher in environmental concern (*M* = `r sprintf("%.2f", dem_own_mean)`) relative to Republicans (*M* = `r sprintf("%.2f", rep_own_mean)`), *d* = `r own_attitudes_d`, *p* `r pformat(own_attitudes_p)`.
-While participants accurately perceived their ingroups (Democrats: *M*~actual~ = `r sprintf("%.2f", dem_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_ingroup_perceived)`, *p* `r pformat(dem_ingroup_p)`; Republicans: *M*~actual~ = `r sprintf("%.2f", rep_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_ingroup_perceived)`, *p* `r pformat(rep_ingroup_p)`), they systematically underestimated how environmentally friendly their counterparts actually were.
-Democrats misperceived Republicans far more than Republicans misperceived Democrats.
+While participants accurately perceived their ingroups (Democrats: *M*~actual~ = `r sprintf("%.2f", dem_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_ingroup_perceived)`, *p* `r pformat(dem_ingroup_p)`; Republicans: *M*~actual~ = `r sprintf("%.2f", rep_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_ingroup_perceived)`, *p* `r pformat(rep_ingroup_p)`), they systematically misperceived their political outgroups.
+Democrats significantly underestimated Republicans' environmental concern (*M*~actual~ = `r sprintf("%.2f", dem_outgroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_outgroup_perceived)`, *d* = `r sprintf("%.2f", dem_outgroup_d)`, *p* `r pformat(dem_outgroup_p)`).
+Republicans also misperceived Democrats, though to a lesser degree (*M*~actual~ = `r sprintf("%.2f", rep_outgroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_outgroup_perceived)`, *d* = `r sprintf("%.2f", rep_outgroup_d)`, *p* `r pformat(rep_outgroup_p)`).
 
 ```{r prepare-long-data}
 # Prepare long format datasets
