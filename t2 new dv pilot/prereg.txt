@@ -1,0 +1,49 @@
+'Twins pilot for experimental study'
+(AsPredicted #274,051)
+Author(s)
+This pre-registration is currently anonymous to enable blind peer-review.
+It has one author.
+Pre-registered on
+2026/02/17 09:32 (PT)
+1) Have any data been collected for this study already?
+No, no data have been collected for this study yet.
+
+2) What's the main question being asked or hypothesis being tested in this study?
+The primary hypothesis is that interacting with an AI chatbot prompted to represent a political outgroup will improve participants' perceptions of that outgroup.
+
+Specifically, we hypothesize that after interacting with the chatbot, participants will:
+(1) Report more accurate beliefs about the outgroup's attitudes toward environmentally responsible consumption.
+(2) Feel warmer toward the political outgroup.
+
+3) Describe the key dependent variable(s) specifying how they will be measured.
+**Primary dependent variables:**
+
+**(P1) Outgroup belief accuracy.**
+Participants will estimate the average political outgroup's agreement with six statements about environmental responsibility (5-point Likert scale). Accuracy will be operationalized as the absolute difference between participants' estimates and the outgroup's actual mean self-reports (computed from the corresponding participants who identify with that group).
+
+**(P2) Outgroup warmth.**
+Measured using a feeling thermometer ranging from 0 ("cold") to 100 ("warm") toward the political outgroup.
+
+**Secondary dependent variables:**
+
+**(P3) Confidence in outgroup judgments.**
+Self-reported confidence in the accuracy of participants' predictions about the outgroup (5-point scale).
+
+4) How many and which conditions will participants be assigned to?
+All participants complete the same procedure. There are no experimental conditions.
+
+Participants interact with a chatbot prompted to represent their political outgroup. Political ingroup and outgroup status are defined based on participants' self-reported political orientation.
+
+5) Specify exactly which analyses you will conduct to examine the main question/hypothesis.
+All primary analyses will examine within-person change from pre- to post-interaction and whether this change differs by participant group: Democrats learning about Republicans (D→R) versus Republicans learning about Democrats (R→D). For each primary outcome (outgroup belief accuracy and outgroup warmth), we will estimate models of the form [y ~ time * learner_party + (1 | id)] where *time* indexes pre- versus post-interaction measurement and *learner_party* indicates D→R versus R→D. The coefficient on *time* captures average pre–post change, and the *time × learner_party* interaction tests whether change differs between groups.
+
+6) Describe exactly how outliers will be defined and handled, and your precise rule(s) for excluding observations.
+No data will be excluded from the main analyses.
+
+7) How many observations will be collected or what will determine sample size?
+No need to justify decision, but be precise about exactly how the number will be determined.
+We will collect data from N = 100 participants.
+
+8) Anything else you would like to pre-register?
+(e.g., secondary analyses, variables collected for exploratory purposes, unusual analyses planned?)
+Nothing else to pre-register.

@@ -1,0 +1,979 @@
+---
+title: "T2 New DV Pilot Analysis"
+subtitle: "Learning from AI Personas — Pilot with Dictator Game"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 3
+    fig-cap-location: bottom
+    tbl-cap-location: top
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(arrow)
+library(lme4)
+library(lmerTest)
+library(effectsize)
+library(rstatix)
+library(gt)
+library(patchwork)
+
+# Path switching for interactive vs quarto rendering
+is_running_in_quarto <- function() {
+  Sys.getenv("QUARTO_DOCUMENT_PATH") != ""
+}
+
+if (is_running_in_quarto()) {
+  dat <- read_parquet("../t2 new dv pilot/analysis_data.parquet")
+  fig_path <- "../output/figures/pilot2/"
+  tab_path <- "../output/tables/pilot2/"
+} else {
+  dat <- read_parquet("./t2 new dv pilot/analysis_data.parquet")
+  fig_path <- "./output/figures/pilot2/"
+  tab_path <- "./output/tables/pilot2/"
+}
+
+dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_path, recursive = TRUE, showWarnings = FALSE)
+
+# Color scheme
+party_colors <- c("D→R" = "#2166AC", "R→D" = "#B2182B")
+
+# Helper functions
+pformat <- function(p, digits = 3) {
+  threshold <- 10^(-digits)
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+
+numformat <- function(x, digits = 2) sprintf(paste0("%.", digits, "f"), x)
+```
+
+## Sample
+
+```{r sample-stats}
+n_total <- nrow(dat)
+n_dr <- sum(dat$learner_party == "D→R")
+n_rd <- sum(dat$learner_party == "R→D")
+mean_age <- mean(dat$age, na.rm = TRUE)
+n_female <- sum(dat$gender == "Female", na.rm = TRUE)
+pct_female <- n_female / n_total * 100
+```
+
+We recruited `r n_total` participants from Prolific (`r n_dr` Democrats, `r n_rd` Republicans; mean age = `r numformat(mean_age)`, `r numformat(pct_female, 0)`% female).
+
+```{r sample-table}
+dat %>%
+  group_by(learner_party) %>%
+  summarise(
+    N = n(),
+    `Mean Age` = mean(age, na.rm = TRUE) %>% numformat(),
+    `% Female` = (sum(gender == "Female", na.rm = TRUE) / n() * 100) %>% numformat(0),
+    `Extremism (M)` = mean(political_extremism, na.rm = TRUE) %>% numformat(),
+    .groups = "drop"
+  ) %>%
+  gt() %>%
+  tab_header(title = "Sample Composition by Learner Party")
+```
+
+### Attention checks
+
+```{r attention-checks}
+# Survey tab switches
+survey_switch_median <- median(dat$tab_switch_count, na.rm = TRUE)
+survey_switch_max <- max(dat$tab_switch_count, na.rm = TRUE)
+survey_hidden_max_sec <- max(dat$time_hidden_ms, na.rm = TRUE) / 1000
+n_survey_switchers <- sum(dat$tab_switch_count > 0, na.rm = TRUE)
+
+# Bot tab switches — time_hidden_ms_bot reflects the chatbot window itself
+bot_switch_median <- median(dat$tab_switch_count_bot, na.rm = TRUE)
+bot_switch_max <- max(dat$tab_switch_count_bot, na.rm = TRUE)
+n_bot_heavy_switchers <- sum(dat$tab_switch_count_bot > 5, na.rm = TRUE)
+bot_hidden_median_sec <- median(dat$time_hidden_ms_bot, na.rm = TRUE) / 1000
+```
+
+During the survey, participants rarely left the screen (median tab switches = `r survey_switch_median`, max = `r survey_switch_max`; only `r n_survey_switchers` participants switched tabs at all, with a maximum hidden time of `r numformat(survey_hidden_max_sec, 0)` seconds). During the bot interaction, `time_hidden_ms_bot` (median = `r numformat(bot_hidden_median_sec / 60, 0)` minutes) reflects time spent in the chatbot window itself, not inattention. `r n_bot_heavy_switchers` participant`r if(n_bot_heavy_switchers != 1) "s"` had more than 5 tab switches during the bot phase, but remained engaged for several minutes. No exclusions were warranted on attention grounds.
+
+## Partisans misperceive each other
+
+```{r baseline-perception-stats}
+# Actual own attitudes by party
+dem_own_mean <- dat %>% filter(participant_party == "Democrat") %>% pull(green_own) %>% mean()
+rep_own_mean <- dat %>% filter(participant_party == "Republican") %>% pull(green_own) %>% mean()
+
+own_test <- dat %>% t_test(green_own ~ participant_party)
+own_d <- dat %>% cohens_d(green_own ~ participant_party) %>% pull(effsize)
+
+# Outgroup perception: Democrats estimating Republicans
+dem_outgroup_actual <- rep_own_mean
+dem_outgroup_perceived <- dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre) %>% mean()
+dem_outgroup_test <- t.test(
+  dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre),
+  mu = dem_outgroup_actual
+)
+dem_outgroup_d <- (dem_outgroup_perceived - dem_outgroup_actual) /
+  sd(dat %>% filter(participant_party == "Democrat") %>% pull(green_outgroup_pre))
+
+# Outgroup perception: Republicans estimating Democrats
+rep_outgroup_actual <- dem_own_mean
+rep_outgroup_perceived <- dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre) %>% mean()
+rep_outgroup_test <- t.test(
+  dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre),
+  mu = rep_outgroup_actual
+)
+rep_outgroup_d <- (rep_outgroup_perceived - rep_outgroup_actual) /
+  sd(dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre))
+```
+
+Democrats rated themselves higher in environmental concern (*M* = `r numformat(dem_own_mean)`) than Republicans (*M* = `r numformat(rep_own_mean)`), *d* = `r numformat(abs(own_d))`, *p* `r pformat(own_test$p)`.
+Democrats underestimated Republicans' environmental concern (*M*~actual~ = `r numformat(dem_outgroup_actual)`, *M*~perceived~ = `r numformat(dem_outgroup_perceived)`, *d* = `r numformat(dem_outgroup_d)`, *p* `r pformat(dem_outgroup_test$p.value)`).
+Republicans also misperceived Democrats (*M*~actual~ = `r numformat(rep_outgroup_actual)`, *M*~perceived~ = `r numformat(rep_outgroup_perceived)`, *d* = `r numformat(rep_outgroup_d)`, *p* `r pformat(rep_outgroup_test$p.value)`).
+
+```{r baseline-accuracy-warmth-correlation}
+cor_overall <- with(dat, cor.test(accuracy_pre, warmth_outgroup_pre))
+cor_dr <- dat %>% filter(learner_party == "D→R") %>% with(cor.test(accuracy_pre, warmth_outgroup_pre))
+cor_rd <- dat %>% filter(learner_party == "R→D") %>% with(cor.test(accuracy_pre, warmth_outgroup_pre))
+```
+
+Baseline accuracy and warmth were positively correlated overall (*r* = `r numformat(cor_overall$estimate)`, *p* `r pformat(cor_overall$p.value)`), and within each subgroup (D→R: *r* = `r numformat(cor_dr$estimate)`, *p* `r pformat(cor_dr$p.value)`; R→D: *r* = `r numformat(cor_rd$estimate)`, *p* `r pformat(cor_rd$p.value)`).
+
+## Pre-Post Analyses
+
+### Accuracy
+
+```{r accuracy-analysis}
+# Prepare long format
+accuracy_long <- dat %>%
+  select(ResponseId, learner_party, political_extremism, accuracy_pre, accuracy_post) %>%
+  pivot_longer(c(accuracy_pre, accuracy_post),
+               names_to = "time", names_pattern = "accuracy_(pre|post)",
+               values_to = "accuracy") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+# Overall paired t-test
+acc_overall_test <- t.test(dat$accuracy_post, dat$accuracy_pre, paired = TRUE)
+acc_d_overall <- mean(dat$accuracy_post - dat$accuracy_pre) / sd(dat$accuracy_post - dat$accuracy_pre)
+
+# Paired t-tests by party
+acc_dr_dat <- dat %>% filter(learner_party == "D→R")
+acc_dr_test <- t.test(acc_dr_dat$accuracy_post, acc_dr_dat$accuracy_pre, paired = TRUE)
+acc_dr_d <- mean(acc_dr_dat$accuracy_post - acc_dr_dat$accuracy_pre) / sd(acc_dr_dat$accuracy_post - acc_dr_dat$accuracy_pre)
+
+acc_rd_dat <- dat %>% filter(learner_party == "R→D")
+acc_rd_test <- t.test(acc_rd_dat$accuracy_post, acc_rd_dat$accuracy_pre, paired = TRUE)
+acc_rd_d <- mean(acc_rd_dat$accuracy_post - acc_rd_dat$accuracy_pre) / sd(acc_rd_dat$accuracy_post - acc_rd_dat$accuracy_pre)
+
+# Mixed-effects model (for interaction test)
+m_acc <- lmer(accuracy ~ time * learner_party + (1 | ResponseId), data = accuracy_long)
+acc_int_est <- fixef(m_acc)["timepost:learner_partyR→D"]
+acc_int_p <- summary(m_acc)$coefficients["timepost:learner_partyR→D", "Pr(>|t|)"]
+```
+
+Chatbot interactions improved accuracy overall (*t*(`r acc_overall_test$parameter`) = `r numformat(acc_overall_test$statistic)`, *p* `r pformat(acc_overall_test$p.value)`, *d* = `r numformat(acc_d_overall)`).
+Democrats (D→R) showed `r if(acc_dr_test$p.value < .05) "significant" else "non-significant"` improvement (*t*(`r acc_dr_test$parameter`) = `r numformat(acc_dr_test$statistic)`, *p* `r pformat(acc_dr_test$p.value)`, *d* = `r numformat(acc_dr_d)`), while Republicans (R→D) showed `r if(acc_rd_test$p.value < .05) "significant" else "non-significant"` improvement (*t*(`r acc_rd_test$parameter`) = `r numformat(acc_rd_test$statistic)`, *p* `r pformat(acc_rd_test$p.value)`, *d* = `r numformat(acc_rd_d)`). The time × party interaction was `r if(acc_int_p < .05) "significant" else "not significant"` (*b* = `r numformat(acc_int_est)`, *p* `r pformat(acc_int_p)`).
+
+#### Accuracy direction breakdown
+
+```{r accuracy-direction}
+# Classify pre-interaction bias direction and whether accuracy improved
+acc_direction <- dat %>%
+  mutate(
+    bias_pre = green_outgroup_pre - actual_green,
+    bias_post = green_outgroup_post - actual_green,
+    bias_direction = case_when(
+      bias_pre > 0 ~ "Overestimate",
+      bias_pre < 0 ~ "Underestimate",
+      TRUE ~ "Exact"
+    ),
+    acc_change = accuracy_post - accuracy_pre,
+    acc_outcome = case_when(
+      acc_change > 0 ~ "Improved",
+      acc_change < 0 ~ "Worsened",
+      TRUE ~ "No change"
+    )
+  )
+
+# Summary table
+acc_dir_table <- acc_direction %>%
+  group_by(learner_party, bias_direction) %>%
+  summarise(
+    n = n(),
+    n_improved = sum(acc_outcome == "Improved"),
+    n_worsened = sum(acc_outcome == "Worsened"),
+    n_nochange = sum(acc_outcome == "No change"),
+    pct_improved = n_improved / n * 100,
+    pct_worsened = n_worsened / n * 100,
+    pct_nochange = n_nochange / n * 100,
+    mean_acc_change = mean(acc_change, na.rm = TRUE),
+    mean_bias_pre = mean(bias_pre),
+    mean_bias_post = mean(bias_post),
+    .groups = "drop"
+  )
+
+acc_dir_tests <- acc_direction %>%
+  group_by(learner_party, bias_direction) %>%
+  summarise(
+    p_value = tryCatch(t.test(acc_change, mu = 0)$p.value, error = function(e) NA_real_),
+    .groups = "drop"
+  )
+
+acc_dir_table <- acc_dir_table %>%
+  left_join(acc_dir_tests, by = c("learner_party", "bias_direction"))
+
+acc_dir_table %>%
+  mutate(
+    `Significant Improvement?` = case_when(
+      is.na(p_value) ~ "NA",
+      p_value < .05 & mean_acc_change > 0 ~ "Yes",
+      TRUE ~ "No"
+    ),
+    `p (Improvement)` = map_chr(p_value, ~ if (is.na(.x)) "NA" else pformat(.x)),
+    across(c(pct_improved, pct_worsened, pct_nochange, mean_acc_change, mean_bias_pre, mean_bias_post), ~ numformat(.x))
+  ) %>%
+  select(
+    Party = learner_party,
+    `Pre-Bias Direction` = bias_direction,
+    N = n,
+    Improved = n_improved,
+    `% Improved` = pct_improved,
+    Worsened = n_worsened,
+    `% Worsened` = pct_worsened,
+    `No Change` = n_nochange,
+    `% No Change` = pct_nochange,
+    `Mean Accuracy Change` = mean_acc_change,
+    `Significant Improvement?`,
+    `p (Improvement)`,
+    `Mean Bias (Pre)` = mean_bias_pre,
+    `Mean Bias (Post)` = mean_bias_post
+  ) %>%
+  gt() %>%
+  tab_header(title = "Accuracy Change by Pre-Interaction Bias Direction") %>%
+  tab_footnote(
+    "Overestimate = believed outgroup held more extreme attitudes than they actually do. Underestimate = believed outgroup held less extreme attitudes. Mean Accuracy Change > 0 indicates improvement. p-values test subgroup change against 0.",
+    locations = cells_title()
+  )
+```
+
+```{r accuracy-direction-overall}
+# Overall counts
+n_over <- sum(acc_direction$bias_direction == "Overestimate")
+n_under <- sum(acc_direction$bias_direction == "Underestimate")
+n_over_improved <- sum(acc_direction$bias_direction == "Overestimate" & acc_direction$acc_outcome == "Improved")
+n_under_improved <- sum(acc_direction$bias_direction == "Underestimate" & acc_direction$acc_outcome == "Improved")
+n_worsened_total <- sum(acc_direction$acc_outcome == "Worsened")
+pct_improved_total <- mean(acc_direction$acc_outcome == "Improved") * 100
+
+over_correctors <- acc_direction %>% filter(bias_direction == "Overestimate")
+over_correctors_test <- t.test(over_correctors$acc_change, mu = 0)
+
+acc_direction_long <- acc_direction %>%
+  select(ResponseId, learner_party, bias_direction, accuracy_pre, accuracy_post) %>%
+  pivot_longer(c(accuracy_pre, accuracy_post),
+               names_to = "time", names_pattern = "accuracy_(pre|post)",
+               values_to = "accuracy") %>%
+  mutate(
+    time = factor(time, levels = c("pre", "post")),
+    bias_direction = factor(bias_direction, levels = c("Underestimate", "Overestimate", "Exact"))
+  )
+
+m_acc_direction <- lmer(accuracy ~ time * bias_direction + learner_party + (1 | ResponseId),
+                        data = acc_direction_long)
+acc_dir_coef <- summary(m_acc_direction)$coefficients
+acc_dir_int_over_p <- if ("timepost:bias_directionOverestimate" %in% rownames(acc_dir_coef)) acc_dir_coef["timepost:bias_directionOverestimate", "Pr(>|t|)"] else NA_real_
+```
+
+Of `r n_total` participants, `r n_over` overestimated and `r n_under` underestimated the outgroup's environmental attitudes at baseline. Among overestimators, `r n_over_improved`/`r n_over` (`r numformat(n_over_improved/n_over*100, 0)`%) improved. Among underestimators, `r n_under_improved`/`r n_under` (`r numformat(n_under_improved/n_under*100, 0)`%) improved. Overall, `r numformat(pct_improved_total, 0)`% of participants became more accurate after the interaction, while `r n_worsened_total` (`r numformat(n_worsened_total/n_total*100, 0)`%) became less accurate.
+
+Even participants who started too positive (overestimators) still improved significantly (*t*(`r numformat(over_correctors_test$parameter, 0)`) = `r numformat(over_correctors_test$statistic)`, *p* `r pformat(over_correctors_test$p.value)`). A mixed model with `time × bias_direction` showed that overestimators did not improve differently from underestimators (*p* `r if(is.na(acc_dir_int_over_p)) "not estimable" else pformat(acc_dir_int_over_p)`).
+
+```{r accuracy-plot}
+#| fig-cap: "Accuracy (negative absolute error) before and after chatbot interaction, by learner party. Lines connect individual participants; bold lines show group means."
+#| fig-width: 7
+#| fig-height: 5
+
+accuracy_long %>%
+  ggplot(aes(x = time, y = accuracy, group = ResponseId, color = learner_party)) +
+  geom_line(alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 1.5) +
+  stat_summary(aes(group = learner_party), fun = mean, geom = "line", linewidth = 1.5) +
+  stat_summary(aes(group = learner_party), fun = mean, geom = "point", size = 3) +
+  scale_color_manual(values = party_colors) +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  labs(y = "Accuracy (neg. abs. error)", x = NULL, color = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(fig_path, "accuracy_prepost.png"), width = 7, height = 5, dpi = 300)
+```
+
+### Warmth
+
+```{r warmth-analysis}
+warmth_long <- dat %>%
+  select(ResponseId, learner_party, warmth_outgroup_pre, warmth_outgroup_post) %>%
+  pivot_longer(c(warmth_outgroup_pre, warmth_outgroup_post),
+               names_to = "time", names_pattern = "warmth_outgroup_(pre|post)",
+               values_to = "warmth") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+# Overall paired t-test
+warm_overall_test <- t.test(dat$warmth_outgroup_post, dat$warmth_outgroup_pre, paired = TRUE)
+warm_d_overall <- mean(dat$warmth_outgroup_post - dat$warmth_outgroup_pre) / sd(dat$warmth_outgroup_post - dat$warmth_outgroup_pre)
+
+# Paired t-tests by party
+warm_dr_dat <- dat %>% filter(learner_party == "D→R")
+warm_dr_test <- t.test(warm_dr_dat$warmth_outgroup_post, warm_dr_dat$warmth_outgroup_pre, paired = TRUE)
+warm_dr_d <- mean(warm_dr_dat$warmth_outgroup_post - warm_dr_dat$warmth_outgroup_pre) / sd(warm_dr_dat$warmth_outgroup_post - warm_dr_dat$warmth_outgroup_pre)
+
+warm_rd_dat <- dat %>% filter(learner_party == "R→D")
+warm_rd_test <- t.test(warm_rd_dat$warmth_outgroup_post, warm_rd_dat$warmth_outgroup_pre, paired = TRUE)
+warm_rd_d <- mean(warm_rd_dat$warmth_outgroup_post - warm_rd_dat$warmth_outgroup_pre) / sd(warm_rd_dat$warmth_outgroup_post - warm_rd_dat$warmth_outgroup_pre)
+
+# Mixed-effects model (for interaction test)
+m_warm <- lmer(warmth ~ time * learner_party + (1 | ResponseId), data = warmth_long)
+warm_int_est <- fixef(m_warm)["timepost:learner_partyR→D"]
+warm_int_p <- summary(m_warm)$coefficients["timepost:learner_partyR→D", "Pr(>|t|)"]
+
+emmeans::emmeans(m_warm, pairwise ~ time | learner_party, infer = TRUE)
+```
+
+Outgroup warmth increased after the chatbot interaction (*t*(`r warm_overall_test$parameter`) = `r numformat(warm_overall_test$statistic)`, *p* `r pformat(warm_overall_test$p.value)`, *d* = `r numformat(warm_d_overall)`).
+Democrats (D→R) showed `r if(warm_dr_test$p.value < .05) "significant" else "non-significant"` warmth increase (*t*(`r warm_dr_test$parameter`) = `r numformat(warm_dr_test$statistic)`, *p* `r pformat(warm_dr_test$p.value)`, *d* = `r numformat(warm_dr_d)`), while Republicans (R→D) showed `r if(warm_rd_test$p.value < .05) "significant" else "non-significant"` warmth increase (*t*(`r warm_rd_test$parameter`) = `r numformat(warm_rd_test$statistic)`, *p* `r pformat(warm_rd_test$p.value)`, *d* = `r numformat(warm_rd_d)`). The time × party interaction was `r if(warm_int_p < .05) "significant" else "not significant"` (*b* = `r numformat(warm_int_est)`, *p* `r pformat(warm_int_p)`).
+
+```{r warmth-plot}
+#| fig-cap: "Outgroup warmth (0-100) before and after chatbot interaction, by learner party."
+#| fig-width: 7
+#| fig-height: 5
+
+warmth_long %>%
+  ggplot(aes(x = time, y = warmth, group = ResponseId, color = learner_party)) +
+  geom_line(alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 1.5) +
+  stat_summary(aes(group = learner_party), fun = mean, geom = "line", linewidth = 1.5) +
+  stat_summary(aes(group = learner_party), fun = mean, geom = "point", size = 3) +
+  scale_color_manual(values = party_colors) +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  labs(y = "Outgroup Warmth (0-100)", x = NULL, color = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(fig_path, "warmth_prepost.png"), width = 7, height = 5, dpi = 300)
+```
+
+### Confidence
+
+```{r confidence-analysis}
+confidence_long <- dat %>%
+  select(ResponseId, learner_party, confidence_outgroup_pre, confidence_outgroup_post) %>%
+  pivot_longer(c(confidence_outgroup_pre, confidence_outgroup_post),
+               names_to = "time", names_pattern = "confidence_outgroup_(pre|post)",
+               values_to = "confidence") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+# Overall paired t-test
+conf_overall_test <- t.test(dat$confidence_outgroup_post, dat$confidence_outgroup_pre, paired = TRUE)
+conf_d_overall <- mean(dat$confidence_outgroup_post - dat$confidence_outgroup_pre) / sd(dat$confidence_outgroup_post - dat$confidence_outgroup_pre)
+
+# Paired t-tests by party
+conf_dr_dat <- dat %>% filter(learner_party == "D→R")
+conf_dr_test <- t.test(conf_dr_dat$confidence_outgroup_post, conf_dr_dat$confidence_outgroup_pre, paired = TRUE)
+conf_dr_d <- mean(conf_dr_dat$confidence_outgroup_post - conf_dr_dat$confidence_outgroup_pre) / sd(conf_dr_dat$confidence_outgroup_post - conf_dr_dat$confidence_outgroup_pre)
+
+conf_rd_dat <- dat %>% filter(learner_party == "R→D")
+conf_rd_test <- t.test(conf_rd_dat$confidence_outgroup_post, conf_rd_dat$confidence_outgroup_pre, paired = TRUE)
+conf_rd_d <- mean(conf_rd_dat$confidence_outgroup_post - conf_rd_dat$confidence_outgroup_pre) / sd(conf_rd_dat$confidence_outgroup_post - conf_rd_dat$confidence_outgroup_pre)
+
+# Mixed-effects model (for interaction test)
+m_conf <- lmer(confidence ~ time * learner_party + (1 | ResponseId), data = confidence_long)
+conf_int_est <- fixef(m_conf)["timepost:learner_partyR→D"]
+conf_int_p <- summary(m_conf)$coefficients["timepost:learner_partyR→D", "Pr(>|t|)"]
+```
+
+Confidence in outgroup predictions changed after the interaction (*t*(`r conf_overall_test$parameter`) = `r numformat(conf_overall_test$statistic)`, *p* `r pformat(conf_overall_test$p.value)`, *d* = `r numformat(conf_d_overall)`).
+Democrats (D→R): *t*(`r conf_dr_test$parameter`) = `r numformat(conf_dr_test$statistic)`, *p* `r pformat(conf_dr_test$p.value)`, *d* = `r numformat(conf_dr_d)`. Republicans (R→D): *t*(`r conf_rd_test$parameter`) = `r numformat(conf_rd_test$statistic)`, *p* `r pformat(conf_rd_test$p.value)`, *d* = `r numformat(conf_rd_d)`. The time × party interaction was `r if(conf_int_p < .05) "significant" else "not significant"` (*b* = `r numformat(conf_int_est)`, *p* `r pformat(conf_int_p)`).
+
+## Dictator Game (New DV)
+
+```{r donation-analysis}
+# Overall donation stats (scale is 0-50 cents)
+don_mean <- mean(dat$donation, na.rm = TRUE)
+don_sd <- sd(dat$donation, na.rm = TRUE)
+don_median <- median(dat$donation, na.rm = TRUE)
+
+# By party
+don_by_party <- dat %>%
+  group_by(learner_party) %>%
+  summarise(
+    M = mean(donation, na.rm = TRUE),
+    SD = sd(donation, na.rm = TRUE),
+    Median = median(donation, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+don_dr_mean <- don_by_party %>% filter(learner_party == "D→R") %>% pull(M)
+don_rd_mean <- don_by_party %>% filter(learner_party == "R→D") %>% pull(M)
+
+# Test party difference
+don_test <- dat %>% t_test(donation ~ learner_party)
+don_d <- dat %>% cohens_d(donation ~ learner_party) %>% pull(effsize)
+don_p <- don_test$p
+
+# Test whether donation > 0 (one-sample) — overall and by party
+don_zero_test <- t.test(dat$donation, mu = 0)
+don_zero_d <- mean(dat$donation, na.rm = TRUE) / sd(dat$donation, na.rm = TRUE)
+
+don_dr_vec <- dat %>% filter(learner_party == "D→R") %>% pull(donation)
+don_rd_vec <- dat %>% filter(learner_party == "R→D") %>% pull(donation)
+
+don_zero_dr <- t.test(don_dr_vec, mu = 0)
+don_zero_dr_d <- mean(don_dr_vec, na.rm = TRUE) / sd(don_dr_vec, na.rm = TRUE)
+
+don_zero_rd <- t.test(don_rd_vec, mu = 0)
+don_zero_rd_d <- mean(don_rd_vec, na.rm = TRUE) / sd(don_rd_vec, na.rm = TRUE)
+
+# Correlations with other DVs
+don_cor_accuracy <- cor.test(dat$donation, dat$accuracy_post, use = "complete.obs")
+don_cor_warmth <- cor.test(dat$donation, dat$warmth_outgroup_post, use = "complete.obs")
+don_cor_acc_change <- cor.test(dat$donation, dat$accuracy_post - dat$accuracy_pre, use = "complete.obs")
+don_cor_warm_change <- cor.test(dat$donation, dat$warmth_outgroup_post - dat$warmth_outgroup_pre, use = "complete.obs")
+```
+
+Participants donated *M* = `r numformat(don_mean)` cents (SD = `r numformat(don_sd)`, Median = `r numformat(don_median, 0)`) out of 50 cents to their outgroup partner. Overall, donations were significantly above zero (*t*(`r don_zero_test$parameter`) = `r numformat(don_zero_test$statistic)`, *p* `r pformat(don_zero_test$p.value)`, *d* = `r numformat(don_zero_d)`).
+
+Broken down by party, Democrats (D→R) donated *M* = `r numformat(don_dr_mean)` cents, `r if(don_zero_dr$p.value < .05) "significantly" else "not significantly"` above zero (*t*(`r don_zero_dr$parameter`) = `r numformat(don_zero_dr$statistic)`, *p* `r pformat(don_zero_dr$p.value)`, *d* = `r numformat(don_zero_dr_d)`). Republicans (R→D) donated *M* = `r numformat(don_rd_mean)` cents, `r if(don_zero_rd$p.value < .05) "significantly" else "not significantly"` above zero (*t*(`r don_zero_rd$parameter`) = `r numformat(don_zero_rd$statistic)`, *p* `r pformat(don_zero_rd$p.value)`, *d* = `r numformat(don_zero_rd_d)`). The party difference was `r if(don_p < .05) "significant" else "not significant"` (*d* = `r numformat(abs(don_d))`, *p* `r pformat(don_p)`).
+
+```{r donation-plot}
+#| fig-cap: "Dictator game donation to outgroup member (0-50 cents) by learner party. Points show individual participants; large point shows mean ± SE."
+#| fig-width: 6
+#| fig-height: 5
+
+ggplot(dat, aes(x = learner_party, y = donation, color = learner_party)) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 2.5) +
+  stat_summary(fun.data = mean_se, geom = "pointrange", size = 0.8, linewidth = 1) +
+  scale_color_manual(values = party_colors) +
+  labs(y = "Donation (cents)", x = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+ggsave(paste0(fig_path, "donation_by_party.png"), width = 6, height = 5, dpi = 300)
+```
+
+### Donation correlations
+
+```{r donation-correlations}
+tibble(
+  Variable = c("Post-accuracy", "Post-warmth", "Accuracy change", "Warmth change"),
+  r = c(don_cor_accuracy$estimate, don_cor_warmth$estimate,
+        don_cor_acc_change$estimate, don_cor_warm_change$estimate) %>% map_chr(~ numformat(.x)),
+  p = c(don_cor_accuracy$p.value, don_cor_warmth$p.value,
+        don_cor_acc_change$p.value, don_cor_warm_change$p.value) %>% map_chr(~ pformat(.x))
+) %>%
+  gt() %>%
+  tab_header(title = "Correlations between Donation and Other DVs")
+```
+
+Donation correlated *r* = `r numformat(don_cor_warmth$estimate)` with post-interaction warmth (*p* `r pformat(don_cor_warmth$p.value)`) and *r* = `r numformat(don_cor_accuracy$estimate)` with post-interaction accuracy (*p* `r pformat(don_cor_accuracy$p.value)`).
+
+### Donation predicted by extremism
+
+```{r donation-extremism}
+m_don_ext <- lm(donation ~ political_extremism * learner_party, data = dat)
+m_don_summary <- summary(m_don_ext)
+
+don_ext_b <- coef(m_don_ext)["political_extremism"]
+don_ext_p <- m_don_summary$coefficients["political_extremism", "Pr(>|t|)"]
+don_ext_int_b <- coef(m_don_ext)["political_extremism:learner_partyR→D"]
+don_ext_int_p <- m_don_summary$coefficients["political_extremism:learner_partyR→D", "Pr(>|t|)"]
+
+# Simple slopes: extremism effect within each party
+m_don_dr <- lm(donation ~ political_extremism, data = dat %>% filter(learner_party == "D→R"))
+m_don_rd <- lm(donation ~ political_extremism, data = dat %>% filter(learner_party == "R→D"))
+don_ext_dr_b <- coef(m_don_dr)["political_extremism"]
+don_ext_dr_p <- summary(m_don_dr)$coefficients["political_extremism", "Pr(>|t|)"]
+don_ext_rd_b <- coef(m_don_rd)["political_extremism"]
+don_ext_rd_p <- summary(m_don_rd)$coefficients["political_extremism", "Pr(>|t|)"]
+```
+
+The extremism × party interaction on donation was `r if(don_ext_int_p < .05) "significant" else "not significant"` (*b* = `r numformat(don_ext_int_b)`, *p* `r pformat(don_ext_int_p)`). Simple slopes: among Democrats (D→R), extremism `r if(don_ext_dr_p < .05) "significantly predicted" else "did not significantly predict"` donation (*b* = `r numformat(don_ext_dr_b)`, *p* `r pformat(don_ext_dr_p)`); among Republicans (R→D), extremism `r if(don_ext_rd_p < .05) "significantly predicted" else "did not significantly predict"` donation (*b* = `r numformat(don_ext_rd_b)`, *p* `r pformat(don_ext_rd_p)`).
+
+```{r donation-extremism-plot}
+#| fig-cap: "Relationship between political extremism and dictator game donation, by learner party."
+#| fig-width: 7
+#| fig-height: 5
+
+ggplot(dat, aes(x = political_extremism, y = donation, color = learner_party)) +
+  geom_point(alpha = 0.6, size = 2.5) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.15) +
+  scale_color_manual(values = party_colors) +
+  labs(x = "Political Extremism", y = "Donation (cents)", color = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(fig_path, "donation_extremism.png"), width = 7, height = 5, dpi = 300)
+```
+
+## Talk Partner Preference (New DV)
+
+```{r talk-partner-analysis}
+# Code whether participant chose outgroup partner
+dat <- dat %>%
+  mutate(
+    chose_outgroup = case_when(
+      participant_party == "Democrat" & talk_partner == "I'd rather talk with a republican" ~ 1,
+      participant_party == "Republican" & talk_partner == "I'd rather talk with a democrat" ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+# Overall outgroup preference rate
+n_chose_outgroup <- sum(dat$chose_outgroup)
+pct_outgroup <- mean(dat$chose_outgroup) * 100
+
+# Binomial test: is outgroup preference significantly above 0%?
+# Under the null of always preferring ingroup, outgroup rate = 0
+talk_binom <- binom.test(n_chose_outgroup, nrow(dat), p = 0, alternative = "greater")
+# 95% CI for the outgroup proportion
+talk_ci <- binom.test(n_chose_outgroup, nrow(dat))$conf.int
+
+# By party
+talk_by_party <- dat %>%
+  group_by(learner_party) %>%
+  summarise(
+    n = n(),
+    n_outgroup = sum(chose_outgroup),
+    pct_outgroup = mean(chose_outgroup) * 100,
+    .groups = "drop"
+  )
+
+talk_dr_pct <- talk_by_party %>% filter(learner_party == "D→R") %>% pull(pct_outgroup)
+talk_rd_pct <- talk_by_party %>% filter(learner_party == "R→D") %>% pull(pct_outgroup)
+
+talk_dr_n <- talk_by_party %>% filter(learner_party == "D→R") %>% pull(n_outgroup)
+talk_dr_total <- talk_by_party %>% filter(learner_party == "D→R") %>% pull(n)
+talk_rd_n <- talk_by_party %>% filter(learner_party == "R→D") %>% pull(n_outgroup)
+talk_rd_total <- talk_by_party %>% filter(learner_party == "R→D") %>% pull(n)
+
+# Binomial tests by party (vs 0%)
+talk_binom_dr <- binom.test(talk_dr_n, talk_dr_total, p = 0, alternative = "greater")
+talk_ci_dr <- binom.test(talk_dr_n, talk_dr_total)$conf.int
+talk_binom_rd <- binom.test(talk_rd_n, talk_rd_total, p = 0, alternative = "greater")
+talk_ci_rd <- binom.test(talk_rd_n, talk_rd_total)$conf.int
+
+# Chi-square test for party difference
+talk_chisq <- chisq.test(table(dat$learner_party, dat$chose_outgroup))
+```
+
+After the chatbot interaction, `r numformat(pct_outgroup, 0)`% of participants (`r n_chose_outgroup`/`r nrow(dat)`) preferred to talk with an outgroup member in a future study, 95% CI [`r numformat(talk_ci[1] * 100, 0)`%, `r numformat(talk_ci[2] * 100, 0)`%]. If participants always preferred their ingroup, this rate would be 0%; the observed rate was significantly above this baseline (*p* `r pformat(talk_binom$p.value)`).
+
+Democrats chose to talk with a Republican `r numformat(talk_dr_pct, 0)`% of the time (`r talk_dr_n`/`r talk_dr_total`, 95% CI [`r numformat(talk_ci_dr[1] * 100, 0)`%, `r numformat(talk_ci_dr[2] * 100, 0)`%]), while Republicans chose to talk with a Democrat `r numformat(talk_rd_pct, 0)`% of the time (`r talk_rd_n`/`r talk_rd_total`, 95% CI [`r numformat(talk_ci_rd[1] * 100, 0)`%, `r numformat(talk_ci_rd[2] * 100, 0)`%]). The party difference was `r if(talk_chisq$p.value < .05) "" else "not "` significant (*χ²* = `r numformat(talk_chisq$statistic)`, *p* `r pformat(talk_chisq$p.value)`).
+
+```{r talk-partner-plot}
+#| fig-cap: "Proportion choosing to talk with outgroup member in future study, by learner party. Error bars show 95% CI."
+#| fig-width: 6
+#| fig-height: 5
+
+talk_plot_dat <- dat %>%
+  group_by(learner_party) %>%
+  summarise(
+    n_total = n(),
+    n_outgroup = sum(chose_outgroup),
+    n_ingroup = n_total - n_outgroup,
+    pct_outgroup = n_outgroup / n_total * 100,
+    pct_ingroup = n_ingroup / n_total * 100,
+    ci_lo = binom.test(n_outgroup, n_total)$conf.int[1] * 100,
+    ci_hi = binom.test(n_outgroup, n_total)$conf.int[2] * 100,
+    .groups = "drop"
+  )
+
+ggplot(talk_plot_dat, aes(x = learner_party, y = pct_outgroup, color = learner_party)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.8, linewidth = 1) +
+  # Outgroup % label (above point)
+  geom_text(aes(y = ci_hi + 4, label = paste0(round(pct_outgroup), "% outgroup")),
+            size = 3.5, show.legend = FALSE) +
+  # Ingroup % label (below point)
+  geom_text(aes(y = ci_lo - 4, label = paste0(round(pct_ingroup), "% ingroup")),
+            size = 3.5, color = "gray50", show.legend = FALSE) +
+  scale_color_manual(values = party_colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25)) +
+  labs(y = "% Choosing Outgroup Partner", x = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+ggsave(paste0(fig_path, "talk_partner_preference.png"), width = 6, height = 5, dpi = 300)
+```
+
+## DV Intercorrelations
+
+```{r dv-intercorrelations}
+# Create DV dataframe
+dv_dat <- dat %>%
+  mutate(
+    accuracy_change = accuracy_post - accuracy_pre,
+    warmth_change = warmth_outgroup_post - warmth_outgroup_pre
+  ) %>%
+  select(
+    learner_party,
+    `Accuracy Δ` = accuracy_change,
+    `Warmth Δ` = warmth_change,
+    Donation = donation,
+    `Outgroup Intent` = chose_outgroup
+  )
+
+# Overall correlation matrix
+dv_numeric <- dv_dat %>% select(-learner_party)
+cor_overall <- cor(dv_numeric, use = "pairwise.complete.obs")
+p_overall <- matrix(NA, ncol(dv_numeric), ncol(dv_numeric))
+for (i in 1:ncol(dv_numeric)) {
+  for (j in 1:ncol(dv_numeric)) {
+    if (i != j) p_overall[i, j] <- cor.test(dv_numeric[[i]], dv_numeric[[j]])$p.value
+  }
+}
+
+# Format overall table
+cor_tbl_overall <- tibble(Variable = colnames(cor_overall))
+for (j in 1:ncol(cor_overall)) {
+  col_vals <- map2_chr(cor_overall[, j], p_overall[, j], function(r, p) {
+    if (is.na(p)) return("—")
+    paste0(numformat(r), if (p < .05) "*" else "")
+  })
+  cor_tbl_overall[[colnames(cor_overall)[j]]] <- col_vals
+}
+
+cor_tbl_overall %>%
+  gt() %>%
+  tab_header(title = "Intercorrelations among DVs (overall)") %>%
+  tab_footnote("* p < .05", locations = cells_title())
+```
+
+```{r dv-intercorrelations-by-party}
+#| tbl-cap: "DV intercorrelations by party. Upper triangle = D→R (blue). Lower triangle = R→D (red). Significant correlations (p < .05) in black; non-significant in gray."
+
+# Compute correlations and p-values by party
+get_cor_p <- function(data) {
+  d <- data %>% select(-learner_party)
+  r_mat <- cor(d, use = "pairwise.complete.obs")
+  p_mat <- matrix(NA, ncol(d), ncol(d))
+  for (i in 1:ncol(d)) {
+    for (j in 1:ncol(d)) {
+      if (i != j) p_mat[i, j] <- cor.test(d[[i]], d[[j]])$p.value
+    }
+  }
+  list(r = r_mat, p = p_mat)
+}
+
+dr_cp <- get_cor_p(dv_dat %>% filter(learner_party == "D→R"))
+rd_cp <- get_cor_p(dv_dat %>% filter(learner_party == "R→D"))
+
+vnames <- colnames(dr_cp$r)
+n_vars <- length(vnames)
+
+# Build combined table: upper triangle = D→R, lower triangle = R→D, diagonal = —
+rows <- list()
+for (i in 1:n_vars) {
+  row <- list(Variable = vnames[i])
+  for (j in 1:n_vars) {
+    if (i == j) {
+      row[[vnames[j]]] <- "—"
+    } else if (j > i) {
+      # Upper triangle: D→R
+      row[[vnames[j]]] <- numformat(dr_cp$r[i, j])
+    } else {
+      # Lower triangle: R→D
+      row[[vnames[j]]] <- numformat(rd_cp$r[i, j])
+    }
+  }
+  rows[[i]] <- as_tibble(row)
+}
+combined_tbl <- bind_rows(rows)
+
+# Build gt with conditional formatting
+gt_out <- combined_tbl %>% gt()
+
+for (j in 1:n_vars) {
+  for (i in 1:n_vars) {
+    if (i != j) {
+      if (j > i) {
+        # Upper triangle: D→R
+        p_val <- dr_cp$p[i, j]
+      } else {
+        # Lower triangle: R→D
+        p_val <- rd_cp$p[i, j]
+      }
+      text_color <- if (!is.na(p_val) && p_val < .05) "black" else "#BBBBBB"
+      font_weight <- if (!is.na(p_val) && p_val < .05) "bold" else "normal"
+      gt_out <- gt_out %>%
+        tab_style(
+          style = list(cell_text(color = text_color, weight = font_weight)),
+          locations = cells_body(columns = vnames[j], rows = i)
+        )
+    }
+  }
+}
+
+gt_out %>%
+  tab_header(title = "DV Intercorrelations by Party") %>%
+  tab_footnote("Upper triangle = D→R. Lower triangle = R→D. Bold black = p < .05; gray = n.s.",
+               locations = cells_title())
+```
+
+```{r dv-scatterplots}
+#| fig-cap: "Pairwise scatterplots among DVs, by learner party. Outgroup intent is binary (0/1) and jittered on the y-axis. Thick colored lines indicate significant correlations (p < .05); faint thin lines indicate non-significant correlations."
+#| fig-width: 14
+#| fig-height: 10
+
+scatter_dat <- dat %>%
+  mutate(
+    accuracy_change = accuracy_post - accuracy_pre,
+    warmth_change = warmth_outgroup_post - warmth_outgroup_pre
+  )
+
+make_scatter <- function(data, x, y, xlab, ylab, jitter_y = FALSE) {
+  # Test significance by party to style lines
+  dr_data <- data %>% filter(learner_party == "D→R")
+  rd_data <- data %>% filter(learner_party == "R→D")
+  dr_p <- tryCatch(cor.test(dr_data[[x]], dr_data[[y]])$p.value, error = function(e) 1)
+  rd_p <- tryCatch(cor.test(rd_data[[x]], rd_data[[y]])$p.value, error = function(e) 1)
+
+  p <- ggplot(data, aes(x = .data[[x]], y = .data[[y]], color = learner_party))
+  if (jitter_y) {
+    p <- p + geom_jitter(alpha = 0.5, size = 2, height = 0.05, width = 0)
+  } else {
+    p <- p + geom_point(alpha = 0.5, size = 2)
+  }
+
+  # Add lines per party with styling based on significance
+  dr_lw <- if (dr_p < .05) 1.2 else 0.5
+  dr_alpha <- if (dr_p < .05) 0.9 else 0.3
+  rd_lw <- if (rd_p < .05) 1.2 else 0.5
+  rd_alpha <- if (rd_p < .05) 0.9 else 0.3
+
+  # Overall relationship (grey line)
+  overall_p <- tryCatch(cor.test(data[[x]], data[[y]])$p.value, error = function(e) 1)
+  overall_lw <- if (overall_p < .05) 1.0 else 0.5
+  overall_alpha <- if (overall_p < .05) 0.6 else 0.25
+
+  p <- p +
+    geom_smooth(data = data, aes(x = .data[[x]], y = .data[[y]]),
+                method = "lm", se = FALSE, inherit.aes = FALSE,
+                linewidth = overall_lw, alpha = overall_alpha, color = "gray50") +
+    geom_smooth(data = dr_data, method = "lm", se = FALSE,
+                linewidth = dr_lw, alpha = dr_alpha, color = party_colors["D→R"]) +
+    geom_smooth(data = rd_data, method = "lm", se = FALSE,
+                linewidth = rd_lw, alpha = rd_alpha, color = party_colors["R→D"]) +
+    scale_color_manual(values = party_colors) +
+    labs(x = xlab, y = ylab) +
+    theme_minimal(base_size = 10) +
+    theme(legend.position = "none")
+
+  p
+}
+
+# All 6 pairwise combinations
+s1 <- make_scatter(scatter_dat, "accuracy_change", "warmth_change", "Accuracy Δ", "Warmth Δ")
+s2 <- make_scatter(scatter_dat, "accuracy_change", "donation", "Accuracy Δ", "Donation (cents)")
+s3 <- make_scatter(scatter_dat, "accuracy_change", "chose_outgroup", "Accuracy Δ", "Outgroup Intent", jitter_y = TRUE)
+s4 <- make_scatter(scatter_dat, "warmth_change", "donation", "Warmth Δ", "Donation (cents)")
+s5 <- make_scatter(scatter_dat, "warmth_change", "chose_outgroup", "Warmth Δ", "Outgroup Intent", jitter_y = TRUE)
+s6 <- make_scatter(scatter_dat, "donation", "chose_outgroup", "Donation (cents)", "Outgroup Intent", jitter_y = TRUE)
+
+(s1 + s2 + s3) / (s4 + s5 + s6)
+
+ggsave(paste0(fig_path, "dv_scatterplots.png"), width = 14, height = 10, dpi = 300)
+```
+
+## Counterbalance Check
+
+```{r counterbalance-check}
+# Check if block order affected key outcomes
+block_acc <- dat %>% t_test(accuracy_pre ~ block)
+block_warm <- dat %>% t_test(warmth_outgroup_pre ~ block)
+block_don <- dat %>% t_test(donation ~ block)
+```
+
+Block order (republican-first vs democrat-first) did not significantly affect baseline accuracy (*p* `r pformat(block_acc$p)`), baseline warmth (*p* `r pformat(block_warm$p)`), or donation (*p* `r pformat(block_don$p)`).
+
+## Summary Table
+
+```{r summary-table}
+#| tbl-cap: "Summary of pre-post changes across all dependent variables."
+
+tibble(
+  DV = c("Accuracy", "Outgroup Warmth", "Confidence"),
+  `Pre (M)` = c(
+    mean(dat$accuracy_pre, na.rm = TRUE),
+    mean(dat$warmth_outgroup_pre, na.rm = TRUE),
+    mean(dat$confidence_outgroup_pre, na.rm = TRUE)
+  ) %>% map_chr(numformat),
+  `Post (M)` = c(
+    mean(dat$accuracy_post, na.rm = TRUE),
+    mean(dat$warmth_outgroup_post, na.rm = TRUE),
+    mean(dat$confidence_outgroup_post, na.rm = TRUE)
+  ) %>% map_chr(numformat),
+  `Change` = c(
+    mean(dat$accuracy_post - dat$accuracy_pre, na.rm = TRUE),
+    mean(dat$warmth_outgroup_post - dat$warmth_outgroup_pre, na.rm = TRUE),
+    mean(dat$confidence_outgroup_post - dat$confidence_outgroup_pre, na.rm = TRUE)
+  ) %>% map_chr(numformat),
+  `d` = c(acc_d_overall, warm_d_overall, conf_d_overall) %>% map_chr(numformat),
+  `p` = c(acc_overall_test$p.value, warm_overall_test$p.value, conf_overall_test$p.value) %>% map_chr(pformat)
+) %>%
+  gt() %>%
+  tab_header(title = "Pre-Post Changes in Key DVs") %>%
+  tab_footnote(
+    footnote = paste0("N = ", n_total, ". d = Cohen's d for paired change scores. p from paired t-tests."),
+    locations = cells_title()
+  )
+```
+
+## Combined Figure
+
+```{r combined-figure}
+#| fig-cap: "Pre-post changes in accuracy, warmth, and confidence, dictator game donation, and talk partner preference by party."
+#| fig-width: 16
+#| fig-height: 5
+
+# --- Precompute mean/SE summaries for labeling ---
+acc_means <- accuracy_long %>%
+  group_by(learner_party, time) %>%
+  summarise(m = mean(accuracy), se = sd(accuracy) / sqrt(n()), .groups = "drop")
+
+warm_means <- warmth_long %>%
+  group_by(learner_party, time) %>%
+  summarise(m = mean(warmth), se = sd(warmth) / sqrt(n()), .groups = "drop")
+
+conf_means <- confidence_long %>%
+  group_by(learner_party, time) %>%
+  summarise(m = mean(confidence), se = sd(confidence) / sqrt(n()), .groups = "drop")
+
+don_means <- dat %>%
+  group_by(learner_party) %>%
+  summarise(m = mean(donation, na.rm = TRUE), se = sd(donation, na.rm = TRUE) / sqrt(n()), .groups = "drop")
+
+# --- Significance labels ---
+p_to_stars <- function(p) {
+  ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", "n.s.")))
+}
+
+acc_sig <- p_to_stars(acc_overall_test$p.value)
+acc_int_sig <- ifelse(acc_int_p < .05, "int. p < .05", "int. n.s.")
+acc_dr_sig <- p_to_stars(acc_dr_test$p.value)
+acc_rd_sig <- p_to_stars(acc_rd_test$p.value)
+
+warm_sig <- p_to_stars(warm_overall_test$p.value)
+warm_int_sig <- ifelse(warm_int_p < .05, "int. p < .05", "int. n.s.")
+warm_dr_sig <- p_to_stars(warm_dr_test$p.value)
+warm_rd_sig <- p_to_stars(warm_rd_test$p.value)
+
+conf_sig <- p_to_stars(conf_overall_test$p.value)
+conf_int_sig <- ifelse(conf_int_p < .05, "int. p < .05", "int. n.s.")
+conf_dr_sig <- p_to_stars(conf_dr_test$p.value)
+conf_rd_sig <- p_to_stars(conf_rd_test$p.value)
+
+# --- Helper for pre-post panels ---
+make_prepost_panel <- function(long_data, means_data, y_var, y_lab, panel_title,
+                                sig_label, int_label, dr_sig, rd_sig) {
+  # Nudge direction: D→R labels go left, R→D labels go right
+  means_data <- means_data %>%
+    mutate(
+      nudge_x = ifelse(learner_party == "D→R", -0.15, 0.15),
+      hjust = ifelse(learner_party == "D→R", 1, 0)
+    )
+
+  y_range <- range(long_data[[y_var]], na.rm = TRUE)
+  y_top <- y_range[2] + diff(y_range) * 0.15
+
+  # Midpoint of each party's line for star placement
+  dr_mid_y <- means_data %>% filter(learner_party == "D→R") %>% summarise(mid = mean(m)) %>% pull(mid)
+  rd_mid_y <- means_data %>% filter(learner_party == "R→D") %>% summarise(mid = mean(m)) %>% pull(mid)
+
+  # Star annotation data (placed above the line midpoint)
+  star_offset <- diff(y_range) * 0.08
+  star_dat <- tibble(
+    x = c(1.5, 1.5),
+    y = c(dr_mid_y + star_offset, rd_mid_y + star_offset),
+    label = c(dr_sig, rd_sig),
+    learner_party = c("D→R", "R→D")
+  )
+
+  ggplot(long_data, aes(x = time, y = .data[[y_var]], group = ResponseId, color = learner_party)) +
+    geom_line(alpha = 0.12) +
+    geom_point(alpha = 0.15, size = 0.8) +
+    # Mean lines
+    geom_line(data = means_data,
+              aes(x = time, y = m, group = learner_party, color = learner_party),
+              linewidth = 1.3, inherit.aes = FALSE) +
+    # Mean ± SE
+    geom_pointrange(data = means_data,
+                    aes(x = time, y = m, ymin = m - se, ymax = m + se,
+                        group = learner_party, color = learner_party),
+                    size = 0.5, linewidth = 0.7, inherit.aes = FALSE) +
+    # Mean value labels
+    geom_text(data = means_data,
+              aes(x = time, y = m, label = numformat(m), color = learner_party),
+              nudge_x = means_data$nudge_x, hjust = means_data$hjust,
+              size = 2.8, show.legend = FALSE, inherit.aes = FALSE) +
+    # Color-coded by-party significance stars above each line
+    geom_text(data = star_dat,
+              aes(x = x, y = y, label = label, color = learner_party),
+              size = 3.5, fontface = "bold", show.legend = FALSE, inherit.aes = FALSE) +
+    # Overall significance annotation
+    annotate("text", x = 1.5, y = y_top, label = paste0("time: ", sig_label),
+             size = 3, fontface = "italic") +
+    annotate("text", x = 1.5, y = y_top - diff(y_range) * 0.08,
+             label = int_label, size = 2.5, color = "gray40") +
+    scale_color_manual(values = party_colors) +
+    scale_x_discrete(labels = c("Pre", "Post")) +
+    labs(y = y_lab, x = NULL, title = panel_title) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "none")
+}
+
+p1 <- make_prepost_panel(accuracy_long, acc_means, "accuracy",
+                          "Accuracy", "A. Accuracy", acc_sig, acc_int_sig,
+                          acc_dr_sig, acc_rd_sig)
+
+p2 <- make_prepost_panel(warmth_long, warm_means, "warmth",
+                          "Outgroup Warmth", "B. Warmth", warm_sig, warm_int_sig,
+                          warm_dr_sig, warm_rd_sig)
+
+p3 <- make_prepost_panel(confidence_long, conf_means, "confidence",
+                          "Confidence", "C. Confidence", conf_sig, conf_int_sig,
+                          conf_dr_sig, conf_rd_sig)
+
+# D. Dictator Game — dots + mean ± SE + labels
+p4 <- ggplot(dat, aes(x = learner_party, y = donation, color = learner_party)) +
+  geom_jitter(width = 0.12, alpha = 0.3, size = 1.5) +
+  stat_summary(fun.data = mean_se, geom = "pointrange", size = 0.5, linewidth = 0.7) +
+  geom_text(data = don_means, aes(x = learner_party, y = m, label = numformat(m)),
+            nudge_x = 0.25, size = 2.8, show.legend = FALSE) +
+  scale_color_manual(values = party_colors) +
+  labs(y = "Donation (cents)", x = NULL, title = "D. Dictator Game") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+
+# E. Talk Partner — pointrange + % labels
+p5 <- talk_plot_dat %>%
+  ggplot(aes(x = learner_party, y = pct_outgroup, color = learner_party)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.5, linewidth = 0.7) +
+  geom_text(aes(y = ci_hi + 5, label = paste0(round(pct_outgroup), "%")),
+            size = 2.8, show.legend = FALSE) +
+  scale_color_manual(values = party_colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25)) +
+  labs(y = "% Choosing Outgroup", x = NULL, title = "E. Talk Partner") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+
+p_combined <- p1 + p2 + p3 + p4 + p5 + plot_layout(ncol = 5)
+ggsave(paste0(fig_path, "combined_results.png"), p_combined, width = 16, height = 5, dpi = 300)
+
+p_combined
+```

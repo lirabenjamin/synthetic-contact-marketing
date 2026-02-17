@@ -241,7 +241,7 @@ Can AI Digital Twins Bridge the Partisan Insight Gap?}
 across the political divide by interacting with AI}
 \author{Benjamin Lira \and Noah Castelo \and Olivier Toubia \and Stefano
 Puntoni}
-\date{2025-12-21}
+\date{2026-02-17}
 
 \begin{document}
 \maketitle
@@ -335,10 +335,14 @@ relative to Republicans (\emph{M} = 3.73), \emph{d} = 0.46, \emph{p}
 (Democrats: \emph{M}\textsubscript{actual} = 4.15,
 \emph{M}\textsubscript{perceived} = 4.17, \emph{p} = 0.558; Republicans:
 \emph{M}\textsubscript{actual} = 3.73, \emph{M}\textsubscript{perceived}
-= 3.39, \emph{p} \textless{} .001), they systematically underestimated
-how environmentally friendly their counterparts actually were. Democrats
-misperceived Republicans far more than Republicans misperceived
-Democrats.
+= 3.39, \emph{p} \textless{} .001), they systematically misperceived
+their political outgroups. Democrats significantly underestimated
+Republicans' environmental concern (\emph{M}\textsubscript{actual} =
+3.73, \emph{M}\textsubscript{perceived} = 2.16, \emph{d} = -1.52,
+\emph{p} \textless{} .001). Republicans also misperceived Democrats,
+though to a lesser degree (\emph{M}\textsubscript{actual} = 4.15,
+\emph{M}\textsubscript{perceived} = 3.96, \emph{d} = -0.20, \emph{p} =
+0.002).
 
 \begin{figure}
 
@@ -436,7 +440,8 @@ Democrats.}
 \end{figure}%
 
 Participants who at baseline felt warmer towards the outgroup were also
-more accurate in their perceptions. This relationship held for both
+more accurate in their perceptions overall (\emph{r} = 0.49, \emph{p}
+\textless{} .001). This relationship also held within each group:
 Democrats (\emph{r} = 0.56, \emph{p} \textless{} .001) and Republicans
 (\emph{r} = 0.27, \emph{p} \textless{} .001).
 
@@ -465,6 +470,42 @@ participants became significantly more accurate (improving by 0.39
 points on the 5-point scale, \emph{d} = 0.49) and warmer toward the
 outgroup (increasing by 4.3 degrees on the 100-point thermometer,
 \emph{d} = -0.17).
+
+\paragraph{Accuracy direction
+breakdown}\label{accuracy-direction-breakdown}
+
+\begin{table}
+\caption*{
+{\large Accuracy Change by Pre-Interaction Bias Direction\textsuperscript{\textit{1}}}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llrrrrrrrrllrr}
+\toprule
+Party & Pre-Bias Direction & N & Improved & \% Improved & Worsened & \% Worsened & No Change & \% No Change & Mean Accuracy Change & Significant Improvement? & p (Improvement) & Mean Bias (Pre) & Mean Bias (Post) \\ 
+\midrule\addlinespace[2.5pt]
+D→R & Overestimate & 26 & 7 & 26.92 & 14 & 53.85 & 5 & 19.23 & -0.24 & No & 0.019 & 0.53 & 0.75 \\ 
+D→R & Underestimate & 222 & 162 & 72.97 & 33 & 14.86 & 27 & 12.16 & 0.73 & Yes & < .001 & -1.82 & -0.77 \\ 
+R→D & Overestimate & 123 & 39 & 31.71 & 40 & 32.52 & 44 & 35.77 & -0.04 & No & 0.299 & 0.53 & 0.39 \\ 
+R→D & Underestimate & 129 & 79 & 61.24 & 35 & 27.13 & 15 & 11.63 & 0.35 & Yes & < .001 & -0.87 & -0.19 \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\textsuperscript{\textit{1}}Overestimate = believed outgroup held more extreme attitudes than they actually do. Underestimate = believed outgroup held less extreme attitudes. Mean Accuracy Change > 0 indicates improvement. p-values are one-sample tests of change against 0 within each subgroup.\\
+\end{minipage}
+\end{table}
+
+Of 500 participants, 149 overestimated and 351 underestimated the
+outgroup's environmental attitudes at baseline. Among overestimators,
+46/149 (31\%) improved. Among underestimators, 241/351 (69\%) improved.
+Overall, 57\% of participants became more accurate after the
+interaction, while 122 (24\%) became less accurate.
+
+Crucially, participants who started too positive (overestimators) still
+showed significant improvement overall (\emph{t}(148) = -2.11, \emph{p}
+= 0.037). In the mixed model, the pre-post gain did not significantly
+differ between overestimators and underestimators (time × overestimate
+\emph{p} \textless{} .001), and did not significantly differ for
+exact-at-baseline participants (interaction not estimable).
 
 \begin{figure}
 
@@ -1328,6 +1369,13 @@ For each primary outcome, we estimated mixed-effects models of the form:
 where \texttt{time} indexes pre- versus post-interaction measurement and
 \texttt{learner\_party} indicates D→R versus R→D learning direction.
 
+\subsubsection{Acknowledgments}\label{acknowledgments}
+
+We thank the Wharton Behavioral Lab for their support in data collection
+and the participants who generously contributed their time to this
+research. We thank Arian, Ace, Roger, Natalia, Nick, who offered helpful
+comments on the design.
+
 \subsection{Appendix}\label{appendix}
 
 \subsubsection{Does interacting with the chatbot improve applied
@@ -1409,6 +1457,42 @@ LLM ratings of slogan fit to target outgroup)
 \item
   ``Smart energy choices today for a cleaner tomorrow''
 \end{enumerate}
+
+\paragraph{BERTopic Analysis of
+Slogans}\label{bertopic-analysis-of-slogans}
+
+BERTopic modeling was applied to the slogans to identify thematic
+clusters. The analysis identified 51 distinct topics from 500 slogans
+(248 D→R, 252 R→D), with 59 slogans classified as outliers. Figure shows
+the distribution of slogans in a 2D topic space, with each point
+representing one slogan. Points are colored by learner party (blue for
+Democrats learning about Republicans, red for Republicans learning about
+Democrats).
+
+The topic modeling reveals common themes in how participants approached
+marketing to their political outgroup: - Energy and money saving (Topics
+0, 5, 13, 18) - Environmental protection (Topics 2, 12, 19, 23) -
+American manufacturing and independence (Topics 3, 28) -
+Smart/sustainable living (Topics 27, 36)
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=11.88in,height=\textheight,keepaspectratio]{../output/figures/bert_topic_slogans.png}
+
+}
+
+\caption{\label{fig-bertopic-slogans}BERTopic visualization of marketing
+slogans. Each point represents one slogan, positioned in 2D topic space
+using UMAP dimensionality reduction. Points are colored by learner
+party: blue indicates Democrats marketing to Republicans (D→R), red
+indicates Republicans marketing to Democrats (R→D). The model identified
+51 topics from 500 slogans, with clustering revealing common themes
+around energy savings, environmental protection, and American
+manufacturing.}
+
+\end{figure}%
 
 \subsubsection{Correlation Matrix}\label{correlation-matrix}
 

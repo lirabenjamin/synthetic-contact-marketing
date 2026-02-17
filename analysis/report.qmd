@@ -593,7 +593,9 @@ p2
 ```
 
 ```{r baseline-accuracy-warmth-correlation}
-# Calculate correlations between baseline accuracy and warmth by party
+# Calculate correlations between baseline accuracy and warmth overall and by party
+cor_overall <- with(dat, cor.test(accuracy_pre, warmth_outgroup_pre))
+
 cor_dem <- dat %>%
   filter(participant_party == "Democrat") %>%
   with(cor.test(accuracy_pre, warmth_outgroup_pre))
@@ -602,13 +604,15 @@ cor_rep <- dat %>%
   filter(participant_party == "Republican") %>%
   with(cor.test(accuracy_pre, warmth_outgroup_pre))
 
+cor_overall_r <- cor_overall$estimate
+cor_overall_p <- cor_overall$p.value
 cor_dem_r <- cor_dem$estimate
 cor_dem_p <- cor_dem$p.value
 cor_rep_r <- cor_rep$estimate
 cor_rep_p <- cor_rep$p.value
 ```
 
-Participants who at baseline felt warmer towards the outgroup were also more accurate in their perceptions. This relationship held for both Democrats (*r* = `r sprintf("%.2f", cor_dem_r)`, *p* `r pformat(cor_dem_p)`) and Republicans (*r* = `r sprintf("%.2f", cor_rep_r)`, *p* `r pformat(cor_rep_p)`).
+Participants who at baseline felt warmer towards the outgroup were also more accurate in their perceptions overall (*r* = `r sprintf("%.2f", cor_overall_r)`, *p* `r pformat(cor_overall_p)`). This relationship also held within each group: Democrats (*r* = `r sprintf("%.2f", cor_dem_r)`, *p* `r pformat(cor_dem_p)`) and Republicans (*r* = `r sprintf("%.2f", cor_rep_r)`, *p* `r pformat(cor_rep_p)`).
 
 ```{r}
 #| label: fig-accuracy-warmth-baseline
@@ -672,6 +676,137 @@ warmth_d <- cohens_d(warmth ~ time, data = warmth_long, pooled_sd = FALSE)$Cohen
 
 We examined whether participants changed their beliefs about the outgroup's environmental attitudes from pre- to post-interaction, analyzing both accuracy and warmth.
 As shown in the table below, participants became significantly more accurate (improving by `r sprintf("%.2f", accuracy_time_coef)` points on the 5-point scale, *d* = `r sprintf("%.2f", accuracy_d)`) and warmer toward the outgroup (increasing by `r sprintf("%.1f", warmth_time_coef)` degrees on the 100-point thermometer, *d* = `r sprintf("%.2f", warmth_d)`).
+
+#### Accuracy direction breakdown
+
+```{r accuracy-direction}
+# Reconstruct actual_green per participant (same logic as clean_data.R)
+actual_outgroup_green <- dat %>%
+  mutate(outgroup_party = if_else(participant_party == "Democrat", "Republican", "Democrat")) %>%
+  left_join(
+    dat %>% group_by(participant_party) %>%
+      summarise(actual_green = mean(green_own, na.rm = TRUE), .groups = "drop"),
+    by = c("outgroup_party" = "participant_party")
+  )
+
+acc_direction <- actual_outgroup_green %>%
+  mutate(
+    bias_pre = green_outgroup_pre - actual_green,
+    bias_post = green_outgroup_post - actual_green,
+    bias_direction = case_when(
+      bias_pre > 0 ~ "Overestimate",
+      bias_pre < 0 ~ "Underestimate",
+      TRUE ~ "Exact"
+    ),
+    acc_change = accuracy_post - accuracy_pre,
+    acc_outcome = case_when(
+      acc_change > 0 ~ "Improved",
+      acc_change < 0 ~ "Worsened",
+      TRUE ~ "No change"
+    )
+  )
+
+acc_dir_table <- acc_direction %>%
+  group_by(learner_party, bias_direction) %>%
+  summarise(
+    n = n(),
+    n_improved = sum(acc_outcome == "Improved"),
+    n_worsened = sum(acc_outcome == "Worsened"),
+    n_nochange = sum(acc_outcome == "No change"),
+    pct_improved = n_improved / n * 100,
+    pct_worsened = n_worsened / n * 100,
+    pct_nochange = n_nochange / n * 100,
+    mean_acc_change = mean(acc_change, na.rm = TRUE),
+    mean_bias_pre = mean(bias_pre),
+    mean_bias_post = mean(bias_post),
+    .groups = "drop"
+  )
+
+acc_dir_tests <- acc_direction %>%
+  group_by(learner_party, bias_direction) %>%
+  summarise(
+    t_test = list(tryCatch(t.test(acc_change, mu = 0), error = function(e) NULL)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    t_stat = map_dbl(t_test, ~ if (is.null(.x)) NA_real_ else unname(.x$statistic)),
+    df = map_dbl(t_test, ~ if (is.null(.x)) NA_real_ else unname(.x$parameter)),
+    p_value = map_dbl(t_test, ~ if (is.null(.x)) NA_real_ else .x$p.value)
+  ) %>%
+  select(-t_test)
+
+acc_dir_table <- acc_dir_table %>%
+  left_join(acc_dir_tests, by = c("learner_party", "bias_direction"))
+
+acc_dir_table %>%
+  mutate(
+    `Significant Improvement?` = case_when(
+      is.na(p_value) ~ "NA",
+      p_value < .05 & mean_acc_change > 0 ~ "Yes",
+      TRUE ~ "No"
+    ),
+    `p (Improvement)` = map_chr(p_value, ~ if (is.na(.x)) "NA" else format_pval(.x)),
+    across(c(pct_improved, pct_worsened, pct_nochange, mean_acc_change, mean_bias_pre, mean_bias_post), ~ sprintf("%.2f", .x))
+  ) %>%
+  select(
+    Party = learner_party,
+    `Pre-Bias Direction` = bias_direction,
+    N = n,
+    Improved = n_improved,
+    `% Improved` = pct_improved,
+    Worsened = n_worsened,
+    `% Worsened` = pct_worsened,
+    `No Change` = n_nochange,
+    `% No Change` = pct_nochange,
+    `Mean Accuracy Change` = mean_acc_change,
+    `Significant Improvement?`,
+    `p (Improvement)`,
+    `Mean Bias (Pre)` = mean_bias_pre,
+    `Mean Bias (Post)` = mean_bias_post
+  ) %>%
+  gt() %>%
+  tab_header(title = "Accuracy Change by Pre-Interaction Bias Direction") %>%
+  tab_footnote(
+    "Overestimate = believed outgroup held more extreme attitudes than they actually do. Underestimate = believed outgroup held less extreme attitudes. Mean Accuracy Change > 0 indicates improvement. p-values are one-sample tests of change against 0 within each subgroup.",
+    locations = cells_title()
+  )
+```
+
+```{r accuracy-direction-counts}
+n_total_acc <- nrow(acc_direction)
+n_over <- sum(acc_direction$bias_direction == "Overestimate")
+n_under <- sum(acc_direction$bias_direction == "Underestimate")
+n_over_improved <- sum(acc_direction$bias_direction == "Overestimate" & acc_direction$acc_outcome == "Improved")
+n_under_improved <- sum(acc_direction$bias_direction == "Underestimate" & acc_direction$acc_outcome == "Improved")
+n_worsened_total <- sum(acc_direction$acc_outcome == "Worsened")
+pct_improved_total <- mean(acc_direction$acc_outcome == "Improved") * 100
+
+over_correctors <- acc_direction %>% filter(bias_direction == "Overestimate")
+over_correctors_test <- t.test(over_correctors$acc_change, mu = 0)
+
+acc_direction_long <- acc_direction %>%
+  select(ResponseId, learner_party, bias_direction, accuracy_pre, accuracy_post) %>%
+  pivot_longer(
+    cols = c(accuracy_pre, accuracy_post),
+    names_to = "time",
+    names_pattern = "accuracy_(pre|post)",
+    values_to = "accuracy"
+  ) %>%
+  mutate(
+    time = factor(time, levels = c("pre", "post")),
+    bias_direction = factor(bias_direction, levels = c("Underestimate", "Overestimate", "Exact"))
+  )
+
+m_acc_direction <- lmer(accuracy ~ time * bias_direction + learner_party + (1 | ResponseId),
+                        data = acc_direction_long)
+acc_dir_coef <- summary(m_acc_direction)$coefficients
+acc_dir_int_over_p <- if ("timepost:bias_directionOverestimate" %in% rownames(acc_dir_coef)) acc_dir_coef["timepost:bias_directionOverestimate", "Pr(>|t|)"] else NA_real_
+acc_dir_int_exact_p <- if ("timepost:bias_directionExact" %in% rownames(acc_dir_coef)) acc_dir_coef["timepost:bias_directionExact", "Pr(>|t|)"] else NA_real_
+```
+
+Of `r n_total_acc` participants, `r n_over` overestimated and `r n_under` underestimated the outgroup's environmental attitudes at baseline. Among overestimators, `r n_over_improved`/`r n_over` (`r sprintf("%.0f", n_over_improved/n_over*100)`%) improved. Among underestimators, `r n_under_improved`/`r n_under` (`r sprintf("%.0f", n_under_improved/n_under*100)`%) improved. Overall, `r sprintf("%.0f", pct_improved_total)`% of participants became more accurate after the interaction, while `r n_worsened_total` (`r sprintf("%.0f", n_worsened_total/n_total_acc*100)`%) became less accurate.
+
+Crucially, participants who started too positive (overestimators) still showed significant improvement overall (*t*(`r sprintf("%.0f", over_correctors_test$parameter)`) = `r sprintf("%.2f", over_correctors_test$statistic)`, *p* `r pformat(over_correctors_test$p.value)`). In the mixed model, the pre-post gain did not significantly differ between overestimators and underestimators (`r if(is.na(acc_dir_int_over_p)) "interaction not estimable" else paste0("time × overestimate *p* ", pformat(acc_dir_int_over_p))`), and did not significantly differ for exact-at-baseline participants (`r if(is.na(acc_dir_int_exact_p)) "interaction not estimable" else paste0("time × exact *p* ", pformat(acc_dir_int_exact_p))`).
 
 ```{r q1-plots}
 #| label: fig-accuracy-warmth-change
@@ -1486,6 +1621,9 @@ For each primary outcome, we estimated mixed-effects models of the form:
 $$y \sim \text{time} \times \text{learner\_party} + (1 | \text{id})$$
 
 where `time` indexes pre- versus post-interaction measurement and `learner_party` indicates D→R versus R→D learning direction.
+
+### Acknowledgments
+We thank the Wharton Behavioral Lab for their support in data collection and the participants who generously contributed their time to this research. We thank Arian, Ace, Roger, Natalia, Nick, who offered helpful comments on the design.
 
 ## Appendix
 
