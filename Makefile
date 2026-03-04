@@ -2,7 +2,7 @@
 # Author: Benjamin Lira
 # Description: Reproducible pipeline for data processing and analysis
 
-.PHONY: all clean data analysis report slides help
+.PHONY: all clean data analysis report slides help bot-survey docs
 
 # Default target: run entire pipeline
 all: report slides
@@ -27,6 +27,7 @@ help:
 	@echo "  make conversations      - Download conversation data from database"
 	@echo "  make analysis-data      - Create minimal publication dataset"
 	@echo "  make extreme-cases      - Analyze extreme cases"
+	@echo "  make bot-survey         - Run bot validity survey (requires OPENAI_API_KEY in .env)"
 	@echo "  make report-html        - Render HTML report only"
 	@echo "  make report-pdf         - Render PDF report only"
 
@@ -88,6 +89,14 @@ data/processed/analysis_data.parquet: data/processed/cleaned_data.parquet src/r/
 	Rscript src/r/create_analysis_data.R
 	@echo "✓ Analysis dataset created"
 
+# Bot validity survey (requires OPENAI_API_KEY in .env)
+bot-survey: data/processed/bot_survey.csv
+
+data/processed/bot_survey.csv: src/python/bot_survey.py
+	@echo "Running bot validity survey via GPT-4o logprobs..."
+	.venv/bin/python3.14 src/python/bot_survey.py
+	@echo "✓ Bot survey saved to data/processed/bot_survey.csv"
+
 # Step 6: Analyze extreme cases
 extreme-cases: output/extreme_cases.csv
 
@@ -130,6 +139,15 @@ analysis/slides.pdf: analysis/slides.qmd data/processed/cleaned_data.parquet dat
 	@echo "Step 9: Rendering presentation slides..."
 	cd analysis && quarto render slides.qmd --to beamer
 	@echo "✓ Slides generated: analysis/slides.pdf"
+
+# Sync HTML reports into docs/ for GitHub Pages
+docs: analysis/report.html
+	@echo "Syncing reports to docs/ for GitHub Pages..."
+	cp analysis/report.html docs/s1-report.html
+	cp "t2 new dv pilot/code.html" docs/p2-pilot.html
+	cp "t2 new dv pilot/t3 experiment pilot/code.html" docs/p2-conditions.html
+	cp studies/README.md docs/registry.md
+	@echo "✓ docs/ updated — push to deploy"
 
 # Development: quick HTML-only render (faster for iteration)
 dev: data
