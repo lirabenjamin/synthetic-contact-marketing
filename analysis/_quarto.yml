@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     number-sections: true
+    embed-resources: true
   pdf:
     toc: true
 bibliography: references.bib

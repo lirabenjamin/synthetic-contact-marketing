@@ -1,0 +1,213 @@
+---
+title: "T3 Experiment Pilot: Condition Comparison"
+subtitle: "Contact vs. Chat vs. Game — Pre-Post Changes by Condition"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: false
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{=html}
+<style>
+  #version-controls {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: white;
+    border-bottom: 2px solid #ddd;
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  }
+  #version-controls .vc-label {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.88em;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  #version-controls .vc-sep {
+    color: #ccc;
+    font-size: 1.2em;
+  }
+  .ver-btn {
+    padding: 5px 14px;
+    border: 2px solid #bbb;
+    border-radius: 20px;
+    background: #f8f8f8;
+    cursor: pointer;
+    font-size: 0.88em;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    color: #444;
+  }
+  .ver-btn:hover { border-color: #888; background: #eee; }
+  .ver-btn.active {
+    background: #2166AC;
+    color: white;
+    border-color: #2166AC;
+  }
+  .version-panel { display: none; }
+  .version-panel.active { display: block; }
+</style>
+
+<div id="version-controls">
+  <span class="vc-label">Data:</span>
+  <button class="ver-btn" id="btn-fd-T" onclick="setToggle('fd','T',this)">Full Data</button>
+  <button class="ver-btn" id="btn-fd-F" onclick="setToggle('fd','F',this)">Feb 17 Only</button>
+  <span class="vc-sep">|</span>
+  <span class="vc-label">Conditions:</span>
+  <button class="ver-btn" id="btn-pc-F" onclick="setToggle('pc','F',this)">3-Condition</button>
+  <button class="ver-btn" id="btn-pc-T" onclick="setToggle('pc','T',this)">Pooled Controls</button>
+</div>
+
+<script>
+  var _state = { fd: 'T', pc: 'T' };
+
+  function updateDisplay() {
+    var ver = _state.fd + _state.pc;
+    document.querySelectorAll('.version-panel').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.version === ver);
+    });
+  }
+
+  function setToggle(axis, value, btn) {
+    _state[axis] = value;
+    var prefix = axis === 'fd' ? 'btn-fd-' : 'btn-pc-';
+    ['T','F'].forEach(function(v) {
+      var b = document.getElementById(prefix + v);
+      if (b) b.classList.toggle('active', v === value);
+    });
+    updateDisplay();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('btn-fd-T').classList.add('active');
+    document.getElementById('btn-pc-T').classList.add('active');
+    updateDisplay();
+  });
+</script>
+```
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(arrow)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(effectsize)
+library(rstatix)
+library(gt)
+library(patchwork)
+
+# Path helpers
+is_running_in_quarto <- function() {
+  Sys.getenv("QUARTO_DOCUMENT_PATH") != ""
+}
+base_path <- if (is_running_in_quarto()) "../t3 experiment pilot/" else "./t3 experiment pilot/"
+tab_path  <- if (is_running_in_quarto()) "../output/tables/t3pilot/"  else "./output/tables/t3pilot/"
+dir.create(tab_path, recursive = TRUE, showWarnings = FALSE)
+
+# Party colors (constant across all versions)
+party_colors <- c("D→R" = "#2166AC", "R→D" = "#B2182B")
+
+# Helper functions
+pformat <- function(p, digits = 3) {
+  threshold <- 10^(-digits)
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+
+numformat <- function(x, digits = 2) sprintf(paste0("%.", digits, "f"), x)
+
+p_to_stars <- function(p) {
+  ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", "n.s.")))
+}
+
+# Lower inline figure DPI to keep HTML file size manageable
+knitr::opts_chunk$set(dpi = 150)
+```
+
+```{r driver, results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+versions <- list(
+  TT = list(full_data = TRUE,  pool_controls = TRUE),
+  TF = list(full_data = TRUE,  pool_controls = FALSE),
+  FT = list(full_data = FALSE, pool_controls = TRUE),
+  FF = list(full_data = FALSE, pool_controls = FALSE)
+)
+
+for (ver_id in names(versions)) {
+  full_data     <- versions[[ver_id]]$full_data
+  pool_controls <- versions[[ver_id]]$pool_controls
+
+  # Load the appropriate data file
+  data_file <- if (full_data) "analysis_data.parquet" else "analysis_data_Feb17.parquet"
+  dat <- read_parquet(paste0(base_path, data_file))
+
+  # Apply pool_controls toggle
+  if (pool_controls) {
+    dat <- dat %>%
+      mutate(treatment = if_else(treatment == "Contact", "Contact", "Control"))
+    condition_colors <- c("Contact" = "#4DAF4A", "Control" = "#999999")
+    treatment_levels <- c("Contact", "Control")
+  } else {
+    condition_colors <- c(
+      "Contact" = "#4DAF4A",
+      "Chat"    = "#377EB8",
+      "Game"    = "#E41A1C"
+    )
+    treatment_levels <- c("Contact", "Chat", "Game")
+  }
+  dat <- dat %>%
+    mutate(treatment = factor(treatment, levels = treatment_levels))
+
+  # Version-specific figure path for ggsave outputs
+  fig_path <- paste0(
+    if (is_running_in_quarto()) "../output/figures/t3pilot/" else "./output/figures/t3pilot/",
+    ver_id, "/"
+  )
+  dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
+
+  # Open version div
+  cat(sprintf('\n<div class="version-panel" data-version="%s">\n\n', ver_id))
+
+  # Render the analysis body as a child document.
+  # To avoid duplicate chunk label errors across iterations, we read _body.qmd
+  # as text and prepend the version ID to every chunk label before knitting.
+  body_path <- paste0(base_path, "_body.qmd")
+  body_text <- readLines(body_path, warn = FALSE)
+  # Replace ```{r label} with ```{r ver_id-label} to make labels unique per version
+  body_text <- gsub(
+    pattern     = "^```\\{r ([^,}]+)",
+    replacement = paste0("```{r ", ver_id, "-\\1"),
+    x           = body_text
+  )
+  body_versioned <- paste(body_text, collapse = "\n")
+
+  # Set fig.path for this version's inline figures
+  knitr::opts_chunk$set(fig.path = paste0("code_files/figure-html/", ver_id, "-"))
+
+  child_out <- knitr::knit_child(
+    text    = body_versioned,
+    envir   = environment(),
+    quiet   = TRUE
+  )
+  cat(child_out)
+  # Reset fig.path
+  knitr::opts_chunk$set(fig.path = "code_files/figure-html/")
+
+  # Close version div
+  cat('\n</div>\n\n')
+}
+```

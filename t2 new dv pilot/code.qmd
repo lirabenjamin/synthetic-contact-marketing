@@ -9,6 +9,7 @@ format:
     toc-depth: 3
     fig-cap-location: bottom
     tbl-cap-location: top
+    embed-resources: true
 execute:
   echo: true
   warning: false
@@ -976,4 +977,63 @@ p_combined <- p1 + p2 + p3 + p4 + p5 + plot_layout(ncol = 5)
 ggsave(paste0(fig_path, "combined_results.png"), p_combined, width = 16, height = 5, dpi = 300)
 
 p_combined
+```
+
+
+# appendix
+
+```{r appendix}
+simulated_data <- accuracy_long %>%
+  mutate(condition = "bot") %>%
+  bind_rows(
+    accuracy_long %>%
+      mutate(condition = "dogs",
+             accuracy = accuracy - rnorm(n(), mean = -1, sd = 0.1))
+  ) %>%
+  bind_rows(
+    accuracy_long %>%
+      mutate(condition = "space",
+             accuracy = accuracy - rnorm(n(), mean = -2, sd = 0.1))
+  )
+m0 <- lmer(accuracy ~ time * condition + (1 | ResponseId),
+           data = simulated_data, REML = FALSE)
+
+# M1: includes party but NO 3-way (your requested middle model)
+m1 <- lmer(accuracy ~ time*condition + time*learner_party + condition*learner_party +
+             (1 | ResponseId),
+           data = simulated_data, REML = FALSE)
+
+# M2: full 3-way (party moderates learning differences between conditions)
+m2 <- lmer(accuracy ~ time * condition * learner_party + (1 | ResponseId),
+           data = simulated_data, REML = FALSE)
+
+print(anova(m0, m1, m2))   # m0 vs m1, and m1 vs m2
+ic <- tibble(
+  model = c("m0: time*condition",
+            "m1: + time*party + condition*party (no 3-way)",
+            "m2: time*condition*party (full)"),
+  AIC = c(AIC(m0), AIC(m1), AIC(m2)),
+  BIC = c(BIC(m0), BIC(m1), BIC(m2)),
+  logLik = c(as.numeric(logLik(m0)), as.numeric(logLik(m1)), as.numeric(logLik(m2))),
+  df = c(attr(logLik(m0),"df"), attr(logLik(m1),"df"), attr(logLik(m2),"df"))
+)
+print(ic)
+
+
+emm0  <- emmeans(m0, ~ time | condition)
+learn0 <- contrast(emm0, "revpairwise", by = "condition")      # post - pre within condition
+did0   <- contrast(learn0, "pairwise", by = NULL)                         # differences of deltas across conditions
+
+emm2p   <- emmeans(m2, ~ time | condition * learner_party)
+learn2p <- contrast(emm2p, "revpairwise", by = c("condition","learner_party"))  # post-pre within cond×party
+did2p   <- contrast(learn2p, "pairwise", by = "learner_party")                  # compare deltas across cond within party
+
+
+did3way <- contrast(did2p, "pairwise", by = c("c1","c2"), adjust = "none")
+# The above may not work depending on how emmeans labels factors.
+# Safer approach: use interaction contrasts directly:
+emm_full <- emmeans(m2, ~ time * condition * learner_party)
+# 3-way interaction contrasts (difference-in-difference-in-differences):
+ddd <- contrast(emm_full, interaction = c("revpairwise", "pairwise", "pairwise"))
+
 ```
