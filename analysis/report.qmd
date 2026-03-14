@@ -249,13 +249,77 @@ rep_outgroup_test <- t.test(
 )
 rep_outgroup_d <- (rep_outgroup_perceived - rep_outgroup_actual) / sd(dat %>% filter(participant_party == "Republican") %>% pull(green_outgroup_pre))
 rep_outgroup_p <- rep_outgroup_test$p.value
+
+# --- Ingroup MAE: person-level mean absolute error for ingroup perception ---
+# For each person: |their guess of ingroup average - actual ingroup mean|
+# actual ingroup mean = mean of green_own within their party
+ingroup_actual_means <- dat %>%
+  group_by(participant_party) %>%
+  summarise(actual_ingroup_mean = mean(green_own, na.rm = TRUE), .groups = "drop")
+
+dat <- dat %>%
+  left_join(ingroup_actual_means, by = "participant_party") %>%
+  mutate(ingroup_mae = abs(green_ingroup - actual_ingroup_mean))
+
+# Descriptives by party
+dem_ingroup_mae <- dat %>% filter(participant_party == "Democrat") %>% pull(ingroup_mae)
+rep_ingroup_mae <- dat %>% filter(participant_party == "Republican") %>% pull(ingroup_mae)
+
+dem_ingroup_mae_mean <- mean(dem_ingroup_mae, na.rm = TRUE)
+dem_ingroup_mae_sd <- sd(dem_ingroup_mae, na.rm = TRUE)
+rep_ingroup_mae_mean <- mean(rep_ingroup_mae, na.rm = TRUE)
+rep_ingroup_mae_sd <- sd(rep_ingroup_mae, na.rm = TRUE)
+
+# Test whether ingroup MAE differs from zero (one-sample t-test)
+dem_ingroup_mae_test <- t.test(dem_ingroup_mae, mu = 0)
+rep_ingroup_mae_test <- t.test(rep_ingroup_mae, mu = 0)
+
+# One-sample Cohen's d (d = M/SD, how far from zero error)
+dem_ingroup_mae_d <- numformat(dem_ingroup_mae_mean / dem_ingroup_mae_sd)
+rep_ingroup_mae_d <- numformat(rep_ingroup_mae_mean / rep_ingroup_mae_sd)
+
+# Compare Dem vs Rep ingroup MAE
+ingroup_mae_comparison <- t.test(ingroup_mae ~ participant_party, data = dat)
+ingroup_mae_d <- dat %>%
+  rstatix::cohens_d(ingroup_mae ~ participant_party) %>%
+  pull(effsize) %>%
+  numformat()
+
+# --- Outgroup MAE (person-level) for direct comparison ---
+# Reconstruct actual outgroup mean (actual_green may not be in parquet)
+outgroup_actual_means <- dat %>%
+  group_by(participant_party) %>%
+  summarise(actual_outgroup_mean = mean(green_own, na.rm = TRUE), .groups = "drop")
+
+dat <- dat %>%
+  mutate(outgroup_party = if_else(participant_party == "Democrat", "Republican", "Democrat")) %>%
+  left_join(outgroup_actual_means, by = c("outgroup_party" = "participant_party")) %>%
+  mutate(outgroup_mae = abs(green_outgroup_pre - actual_outgroup_mean))
+
+# Paired test: outgroup MAE vs ingroup MAE (within-person)
+overall_io_test <- t.test(dat$outgroup_mae, dat$ingroup_mae, paired = TRUE)
+overall_io_d <- numformat(mean(dat$outgroup_mae - dat$ingroup_mae) / sd(dat$outgroup_mae - dat$ingroup_mae))
+
+dem_sub <- dat %>% filter(participant_party == "Democrat")
+dem_io_test <- t.test(dem_sub$outgroup_mae, dem_sub$ingroup_mae, paired = TRUE)
+dem_io_d <- numformat(mean(dem_sub$outgroup_mae - dem_sub$ingroup_mae) / sd(dem_sub$outgroup_mae - dem_sub$ingroup_mae))
+
+rep_sub <- dat %>% filter(participant_party == "Republican")
+rep_io_test <- t.test(rep_sub$outgroup_mae, rep_sub$ingroup_mae, paired = TRUE)
+rep_io_d <- numformat(mean(rep_sub$outgroup_mae - rep_sub$ingroup_mae) / sd(rep_sub$outgroup_mae - rep_sub$ingroup_mae))
+
+# Outgroup MAE descriptives
+dem_outgroup_mae_mean <- mean(dem_sub$outgroup_mae, na.rm = TRUE)
+rep_outgroup_mae_mean <- mean(rep_sub$outgroup_mae, na.rm = TRUE)
 ```
 
 Participants systematically misperceived the environmental attitudes of their political opponents.
 Most participants held strong partisan identities, with the majority in the top and bottom quartiles of the political spectrum (@fig-political-orientation).
 Democrats rated themselves higher in environmental concern (*M* = `r sprintf("%.2f", dem_own_mean)`) relative to Republicans (*M* = `r sprintf("%.2f", rep_own_mean)`), *d* = `r own_attitudes_d`, *p* `r pformat(own_attitudes_p)`.
-While participants accurately perceived their ingroups (Democrats: *M*~actual~ = `r sprintf("%.2f", dem_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_ingroup_perceived)`, *p* `r pformat(dem_ingroup_p)`; Republicans: *M*~actual~ = `r sprintf("%.2f", rep_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_ingroup_perceived)`, *p* `r pformat(rep_ingroup_p)`), they systematically misperceived their political outgroups.
-Democrats significantly underestimated Republicans' environmental concern (*M*~actual~ = `r sprintf("%.2f", dem_outgroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_outgroup_perceived)`, *d* = `r sprintf("%.2f", dem_outgroup_d)`, *p* `r pformat(dem_outgroup_p)`).
+At the group level, participants' average ingroup estimates closely matched actual ingroup means (Democrats: *M*~actual~ = `r sprintf("%.2f", dem_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_ingroup_perceived)`, *p* `r pformat(dem_ingroup_p)`; Republicans: *M*~actual~ = `r sprintf("%.2f", rep_ingroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_ingroup_perceived)`, *p* `r pformat(rep_ingroup_p)`).
+However, individual-level accuracy tells a different story. Computing mean absolute error (MAE) between each participant's ingroup estimate and the actual ingroup mean, both parties showed significant ingroup misperception: Democrats had an average MAE of `r numformat(dem_ingroup_mae_mean)` (*SD* = `r numformat(dem_ingroup_mae_sd)`, *d* = `r dem_ingroup_mae_d`, *p* `r pformat(dem_ingroup_mae_test$p.value)`) and Republicans had an MAE of `r numformat(rep_ingroup_mae_mean)` (*SD* = `r numformat(rep_ingroup_mae_sd)`, *d* = `r rep_ingroup_mae_d`, *p* `r pformat(rep_ingroup_mae_test$p.value)`). Republicans were significantly less accurate at predicting their own ingroup's attitudes than Democrats (*d* = `r ingroup_mae_d`, *p* `r pformat(ingroup_mae_comparison$p.value)`).
+Comparing ingroup and outgroup prediction error within person, outgroup MAE was significantly larger than ingroup MAE overall (*d* = `r overall_io_d`, *p* `r pformat(overall_io_test$p.value)`), but this effect was driven entirely by Democrats. Democrats' outgroup MAE (`r numformat(dem_outgroup_mae_mean)`) far exceeded their ingroup MAE (`r numformat(dem_ingroup_mae_mean)`; *d* = `r dem_io_d`, *p* `r pformat(dem_io_test$p.value)`). Republicans, by contrast, were actually *more* accurate about Democrats (outgroup MAE = `r numformat(rep_outgroup_mae_mean)`) than about their own party (ingroup MAE = `r numformat(rep_ingroup_mae_mean)`; *d* = `r rep_io_d`, *p* `r pformat(rep_io_test$p.value)`).
+In terms of directional bias, Democrats significantly underestimated Republicans' environmental concern (*M*~actual~ = `r sprintf("%.2f", dem_outgroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", dem_outgroup_perceived)`, *d* = `r sprintf("%.2f", dem_outgroup_d)`, *p* `r pformat(dem_outgroup_p)`).
 Republicans also misperceived Democrats, though to a lesser degree (*M*~actual~ = `r sprintf("%.2f", rep_outgroup_actual)`, *M*~perceived~ = `r sprintf("%.2f", rep_outgroup_perceived)`, *d* = `r sprintf("%.2f", rep_outgroup_d)`, *p* `r pformat(rep_outgroup_p)`).
 
 ```{r prepare-long-data}
@@ -1626,6 +1690,204 @@ where `time` indexes pre- versus post-interaction measurement and `learner_party
 We thank the Wharton Behavioral Lab for their support in data collection and the participants who generously contributed their time to this research. We thank Arian, Ace, Roger, Natalia, Nick, who offered helpful comments on the design.
 
 ## Appendix
+
+### Bot Validity: Do the chatbots accurately represent their target groups?
+
+A fundamental assumption of the synthetic-contact paradigm is that the chatbot faithfully represents the political group it simulates. We test this assumption directly by administering the same six environmental-attitude items to each chatbot and comparing the bot's responses to the actual group means observed in our sample.
+
+Rather than sampling multiple responses, we exploit GPT-4o's log-probability outputs. For each (bot × question) pair, we request a single-token completion restricted to digits 1–5, extract the log-probabilities for all five digit tokens, renormalize them to sum to one, and compute a weighted expected value $E = \sum_{i=1}^{5} i \cdot p_i$. This yields a continuous, deterministic point estimate that reflects the model's full distribution over response options.
+
+```{r bot-validity-data}
+#| cache: false
+
+# Load bot survey results (generated by src/python/bot_survey.py)
+if (is_running_in_quarto()) {
+  bot_survey_path <- "../data/processed/bot_survey.csv"
+} else {
+  bot_survey_path <- "./data/processed/bot_survey.csv"
+}
+
+bot_has_data <- file.exists(bot_survey_path)
+
+if (bot_has_data) {
+  bot_survey <- read_csv(bot_survey_path, show_col_types = FALSE)
+
+  q_labels_bv <- c(
+    "1" = "Products don't\nharm environment",
+    "2" = "Consider env.\nimpact of actions",
+    "3" = "Purchase habits\naffected by concern",
+    "4" = "Concerned about\nwasting resources",
+    "5" = "Environmentally\nresponsible",
+    "6" = "Willing to be\ninconvenienced",
+    "0" = "Average"
+  )
+
+  # Actual human means by party and question (with 95% CIs)
+  human_means <- dat %>%
+    select(participant_party, g1_own:g6_own) %>%
+    pivot_longer(g1_own:g6_own, names_to = "question", values_to = "score") %>%
+    mutate(question_num = as.integer(str_extract(question, "\\d+"))) %>%
+    group_by(participant_party, question_num) %>%
+    summarise(
+      mean_score = mean(score, na.rm = TRUE),
+      ci_lo = mean(score, na.rm = TRUE) - qt(0.975, sum(!is.na(score)) - 1) * sd(score, na.rm = TRUE) / sqrt(sum(!is.na(score))),
+      ci_hi = mean(score, na.rm = TRUE) + qt(0.975, sum(!is.na(score)) - 1) * sd(score, na.rm = TRUE) / sqrt(sum(!is.na(score))),
+      .groups = "drop"
+    ) %>%
+    rename(party = participant_party) %>%
+    mutate(source = "Humans")
+
+  # Human composite average (with 95% CIs)
+  human_avg <- dat %>%
+    group_by(participant_party) %>%
+    summarise(
+      mean_score = mean(green_own, na.rm = TRUE),
+      ci_lo = mean(green_own, na.rm = TRUE) - qt(0.975, sum(!is.na(green_own)) - 1) * sd(green_own, na.rm = TRUE) / sqrt(sum(!is.na(green_own))),
+      ci_hi = mean(green_own, na.rm = TRUE) + qt(0.975, sum(!is.na(green_own)) - 1) * sd(green_own, na.rm = TRUE) / sqrt(sum(!is.na(green_own))),
+      .groups = "drop"
+    ) %>%
+    rename(party = participant_party) %>%
+    mutate(question_num = 0L, source = "Humans")
+
+  # Bot item scores (no CIs — single point estimate)
+  bot_means <- bot_survey %>%
+    select(bot_party, question_num, expected_value) %>%
+    rename(party = bot_party, mean_score = expected_value) %>%
+    mutate(source = "Bot", ci_lo = NA_real_, ci_hi = NA_real_)
+
+  # Bot composite average
+  bot_avg <- bot_survey %>%
+    group_by(bot_party) %>%
+    summarise(mean_score = mean(expected_value), .groups = "drop") %>%
+    rename(party = bot_party) %>%
+    mutate(question_num = 0L, source = "Bot", ci_lo = NA_real_, ci_hi = NA_real_)
+
+  x_order <- c(as.character(1:6), "0")
+
+  bot_validity_dat <- bind_rows(human_means, human_avg, bot_means, bot_avg) %>%
+    mutate(
+      party   = factor(party,  levels = c("Democrat", "Republican")),
+      source  = factor(source, levels = c("Humans", "Bot")),
+      x_label = factor(q_labels_bv[as.character(question_num)],
+                       levels = q_labels_bv[x_order])
+    )
+}
+```
+
+```{r bot-validity-plot}
+#| label: fig-bot-validity
+#| fig-cap: "Bot vs. human environmental attitude scores across the six items and their composite average. Solid lines connect human means; dashed lines connect bot expected values (log-probability-weighted scores). The rightmost point shows the composite mean across all six items."
+#| fig-width: 7.5
+#| fig-height: 4
+
+if (bot_has_data) {
+  # Number of x levels; separator goes after position 6 (before Average)
+  n_items <- 6L
+
+  p_bot <- bot_validity_dat %>%
+    ggplot(aes(
+      x     = x_label,
+      y     = mean_score,
+      color = party,
+      shape = source,
+      group = interaction(party, source)
+    )) +
+    geom_vline(xintercept = n_items + 0.5, linetype = "dotted", color = "grey60") +
+    geom_ribbon(
+      data = ~ filter(.x, source == "Humans"),
+      aes(ymin = ci_lo, ymax = ci_hi, fill = party, group = party),
+      alpha = 0.15, color = NA
+    ) +
+    geom_line(aes(linetype = source), linewidth = 0.8) +
+    geom_point(size = 3) +
+    scale_color_manual(values = party_colors, name = "Party") +
+    scale_fill_manual(values = party_colors, guide = "none") +
+    scale_shape_manual(values  = c("Humans" = 16, "Bot" = 4), name = "Source") +
+    scale_linetype_manual(values = c("Humans" = "solid", "Bot" = "dashed"), name = "Source") +
+    scale_y_continuous(limits = c(1, 5), breaks = 1:5,
+                       name = "Score (1 = Disagree strongly, 5 = Agree strongly)") +
+    labs(x = NULL) +
+    theme_minimal() +
+    theme(
+      legend.position  = "bottom",
+      axis.text.x      = element_text(size = 8),
+      panel.grid.minor = element_blank()
+    )
+
+  ggsave(paste0(fig_path, "fig_bot_validity.png"), p_bot, width = 7.5, height = 4, dpi = 300)
+  p_bot
+} else {
+  message("Bot survey data not found. Run src/python/bot_survey.py first.")
+}
+```
+
+```{r bot-validity-table}
+#| tbl-cap: "Bot vs. human environmental attitude scores by question."
+
+if (bot_has_data) {
+  bot_validity_dat %>%
+    mutate(label = paste0(party, " (", source, ")")) %>%
+    select(label, x_label, mean_score) %>%
+    pivot_wider(names_from = label, values_from = mean_score) %>%
+    rename(Question = x_label) %>%
+    gt() %>%
+    fmt_number(columns = where(is.numeric), decimals = 2) %>%
+    tab_spanner(label = "Democrats", columns = starts_with("Democrat")) %>%
+    tab_spanner(label = "Republicans", columns = starts_with("Republican")) %>%
+    tab_style(
+      style = cell_borders(sides = "top", weight = px(2)),
+      locations = cells_body(rows = Question == "Average")
+    ) %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_body(rows = Question == "Average")
+    ) %>%
+    tab_header(title = "Bot vs. Human Environmental Attitude Scores")
+}
+```
+
+```{r bot-discriminant}
+if (bot_has_data) {
+  # Wide format: one row per (bot_party, question_num), columns for human scores
+  wide <- bot_validity_dat %>%
+    filter(question_num >= 0) %>%
+    select(party, source, question_num, mean_score) %>%
+    pivot_wider(names_from = c(party, source), values_from = mean_score,
+                names_sep = "_") %>%
+    rename(
+      dem_human = `Democrat_Humans`,
+      rep_human = `Republican_Humans`,
+      dem_bot   = `Democrat_Bot`,
+      rep_bot   = `Republican_Bot`
+    ) %>%
+    mutate(
+      # Democrat bot: distance to own group vs. other group
+      dem_bot_to_own   = abs(dem_bot - dem_human),
+      dem_bot_to_other = abs(dem_bot - rep_human),
+      # Republican bot: distance to own group vs. other group
+      rep_bot_to_own   = abs(rep_bot - rep_human),
+      rep_bot_to_other = abs(rep_bot - dem_human)
+    )
+
+  # Composite (average row, question_num == 0)
+  avg_row <- wide %>% filter(question_num == 0)
+  dem_bot_own_avg   <- avg_row$dem_bot_to_own
+  dem_bot_other_avg <- avg_row$dem_bot_to_other
+  rep_bot_own_avg   <- avg_row$rep_bot_to_own
+  rep_bot_other_avg <- avg_row$rep_bot_to_other
+
+  # Item-level: does each bot stay closer to its own group on every item?
+  items <- wide %>% filter(question_num > 0)
+  dem_passes_all <- all(items$dem_bot_to_own < items$dem_bot_to_other)
+  rep_passes_all <- all(items$rep_bot_to_own < items$rep_bot_to_other)
+}
+```
+
+The bots pass a discriminant validity test: each bot is closer to its target group than to the outgroup on every item.
+The Democrat bot's composite score deviates `r if(bot_has_data) numformat(dem_bot_own_avg)` points from actual Democrats, compared to `r if(bot_has_data) numformat(dem_bot_other_avg)` points from actual Republicans.
+The Republican bot deviates `r if(bot_has_data) numformat(rep_bot_own_avg)` points from actual Republicans, versus `r if(bot_has_data) numformat(rep_bot_other_avg)` points from actual Democrats.
+This pattern holds across all six individual items for both bots (`r if(bot_has_data) ifelse(dem_passes_all & rep_passes_all, "all 12 item-level comparisons pass", "some items fail")`).
+Both bots are miscalibrated in magnitude—the Democrat bot overshoots actual Democratic attitudes and the Republican bot undershoots actual Republican attitudes—but they correctly preserve the ordinal structure of the party gap.
 
 ### Does interacting with the chatbot improve applied judgment?
 
