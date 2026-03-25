@@ -1,0 +1,504 @@
+---
+title: "Study 2: Green Market Game Experiment"
+subtitle: "Treatment (Republican Twin) vs. Control (Dogs Chatbot)"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 3
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(mongolite)
+library(lme4)
+library(lmerTest)
+library(lavaan)
+library(broom)
+library(broom.mixed)
+library(effectsize)
+library(patchwork)
+library(gt)
+
+knitr::opts_chunk$set(dpi = 150)
+
+# ── Load .env ────────────────────────────────────────────────────────────────
+
+dotenv::load_dot_env(here::here(".env"))
+MONGODB_URI <- Sys.getenv("MONGODB_URI")
+
+# Game parameters
+OPTIMAL_REVENUE_PER_ROUND <- 245000  # 50k Harlan + 50k Williamson
+N_ROUNDS <- 8
+
+# Colors
+COND_COLORS <- c(control = "#9ca3af", treatment = "#2563eb")
+COND_LABELS <- c(control = "Control (Dogs)", treatment = "Treatment (Twin)")
+MARKET_COLORS <- c(
+  harlan = "#dc2626", williamson = "#f97316",
+  burlington = "#3b82f6", middlesex = "#1d4ed8"
+)
+
+# Helpers
+pformat <- function(p, digits = 3) {
+  threshold <- 10^(-digits)
+  if (is.na(p)) return("NA")
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+```
+
+# Data
+
+```{r pull-data}
+con <- mongo(
+  collection = "participants",
+  db = "synthetic-contact",
+  url = MONGODB_URI
+)
+
+raw <- con$find("{}")
+cat("Total documents:", nrow(raw), "\n")
+con$disconnect()
+```
+
+```{r clean}
+# ── Filter to completed participants ─────────────────────────────────────────
+
+d <- raw |> filter(!is.na(completed_at))
+cat("Completed:", nrow(d), "/", nrow(raw), "\n")
+
+# ── Exclude test data (Prolific PIDs starting with "test_") ──────────────────
+# Keep test data if that's all we have (for development)
+
+n_real <- sum(!str_starts(d$prolific_pid, "test_"))
+if (n_real > 0) {
+  d <- d |> filter(!str_starts(prolific_pid, "test_"))
+  cat("After excluding test PIDs:", nrow(d), "\n")
+} else {
+  cat("WARNING: Only test data available. Keeping all", nrow(d), "rows for development.\n")
+}
+
+# ── Quality flags ────────────────────────────────────────────────────────────
+
+d <- d |>
+  mutate(
+    flag_chatbot_duration = !chatbot_duration_valid,
+    flag_honeypot = honeypot_value != "" & !is.na(honeypot_value),
+    flag_fast_bot = bot_timing_ms < 5000,
+    flag_any = flag_chatbot_duration | flag_honeypot | flag_fast_bot
+  )
+
+cat("Quality flags:\n")
+cat("  Chatbot duration invalid:", sum(d$flag_chatbot_duration, na.rm = TRUE), "\n")
+cat("  Honeypot failed:", sum(d$flag_honeypot, na.rm = TRUE), "\n")
+cat("  Fast bot timing (<5s):", sum(d$flag_fast_bot, na.rm = TRUE), "\n")
+cat("  Any flag:", sum(d$flag_any, na.rm = TRUE), "\n")
+
+# ── Tab leaves ───────────────────────────────────────────────────────────────
+
+d <- d |>
+  mutate(
+    n_tab_leaves = map_int(tab_leaves, ~ if (is.data.frame(.x)) nrow(.x) else 0L)
+  )
+
+# ── Unnest game rounds ──────────────────────────────────────────────────────
+
+rounds <- d |>
+  select(submission_id, condition, prolific_pid, extremity, party, game_rounds) |>
+  unnest(game_rounds) |>
+  mutate(
+    alloc_R = alloc_harlan + alloc_williamson,
+    alloc_D = alloc_burlington + alloc_middlesex
+  )
+
+cat("\nParticipant-level:", nrow(d), "rows\n")
+cat("Round-level:", nrow(rounds), "rows\n")
+```
+
+```{r descriptives}
+#| label: tbl-descriptives
+#| tbl-cap: "Sample descriptives by condition"
+
+d |>
+  group_by(condition) |>
+  summarize(
+    N = n(),
+    `Age (M)` = mean(age, na.rm = TRUE) |> round(1),
+    `Age (SD)` = sd(age, na.rm = TRUE) |> round(1),
+    `% Female` = (mean(gender == "Female", na.rm = TRUE) * 100) |> round(0),
+    `Extremity (M)` = mean(extremity, na.rm = TRUE) |> round(1),
+    `Chat duration (s)` = mean(chatbot_duration_ms / 1000, na.rm = TRUE) |> round(0),
+    .groups = "drop"
+  ) |>
+  gt() |>
+  cols_label(condition = "Condition")
+```
+
+# Quality Checks
+
+```{r quality}
+#| label: tbl-quality
+#| tbl-cap: "Quality flag summary"
+
+d |>
+  summarize(
+    N = n(),
+    `Chatbot too short` = sum(flag_chatbot_duration, na.rm = TRUE),
+    `Honeypot fail` = sum(flag_honeypot, na.rm = TRUE),
+    `Bot timing < 5s` = sum(flag_fast_bot, na.rm = TRUE),
+    `Any flag` = sum(flag_any, na.rm = TRUE),
+    `Median tab leaves` = median(n_tab_leaves, na.rm = TRUE)
+  ) |>
+  gt()
+```
+
+# Primary Analysis: Condition → % Allocated to R Markets
+
+**Hypothesis**: Treatment participants allocate more budget to Republican-leaning markets because the chatbot corrected their overestimation of Republican hostility toward environmental products.
+
+```{r primary}
+#| label: fig-primary
+#| fig-cap: "% of total budget allocated to Republican-leaning markets by condition"
+
+# Descriptives by condition
+d |>
+  group_by(condition) |>
+  summarize(M = mean(game_total_pct_R, na.rm = TRUE),
+            SD = sd(game_total_pct_R, na.rm = TRUE),
+            N = n(), .groups = "drop") |>
+  print()
+
+# Need >= 2 per cell for t-test
+cell_ns <- d |> count(condition)
+can_infer <- all(cell_ns$n >= 2)
+
+if (can_infer) {
+  tt <- t.test(game_total_pct_R ~ condition, data = d)
+  cd <- cohens_d(game_total_pct_R ~ condition, data = d)
+  cat(sprintf("t(%.1f) = %.2f, p %s, d = %.2f\n",
+              tt$parameter, tt$statistic, pformat(tt$p.value), cd$Cohens_d))
+} else {
+  cat("Too few participants per cell for inference. Showing descriptives only.\n")
+}
+
+# Regression (need >= 2 per cell)
+if (can_infer) {
+  m1 <- lm(game_total_pct_R ~ condition, data = d)
+  m2 <- lm(game_total_pct_R ~ condition + extremity + age + gender, data = d)
+} else {
+  m1 <- m2 <- NULL
+}
+
+# Plot
+d |>
+  ggplot(aes(x = condition, y = game_total_pct_R, fill = condition)) +
+  geom_boxplot(alpha = 0.4, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "black") +
+  scale_fill_manual(values = COND_COLORS, labels = COND_LABELS, guide = "none") +
+  scale_x_discrete(labels = COND_LABELS) +
+  labs(x = NULL, y = "% Budget to R-Leaning Markets (Total)") +
+  theme_minimal(base_size = 14)
+```
+
+```{r primary-table}
+#| label: tbl-primary
+#| tbl-cap: "OLS: Condition predicting total % allocated to R-leaning markets"
+
+if (!is.null(m1)) {
+  bind_rows(
+    tidy(m1, conf.int = TRUE) |> mutate(model = "Bivariate"),
+    tidy(m2, conf.int = TRUE) |> mutate(model = "With covariates")
+  ) |>
+    filter(term != "(Intercept)") |>
+    select(model, term, estimate, std.error, statistic, p.value, conf.low, conf.high) |>
+    mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+    gt() |>
+    cols_label(
+      model = "Model", term = "Predictor",
+      estimate = "b", std.error = "SE", statistic = "t",
+      p.value = "p", conf.low = "95% CI Low", conf.high = "95% CI High"
+    )
+} else {
+  cat("Regression tables will appear once sufficient data is collected.\n")
+}
+```
+
+# Learning Curve: Condition × Round
+
+Treatment effect should be strongest in early rounds — participants who chatted with a Republican twin start with less biased priors about R-market receptivity.
+
+```{r learning-curve}
+#| label: fig-learning-curve
+#| fig-cap: "Round-by-round % allocated to R-leaning markets by condition"
+
+# ── Plot ─────────────────────────────────────────────────────────────────────
+
+round_means <- rounds |>
+  group_by(condition, round) |>
+  summarize(
+    M = mean(pct_R, na.rm = TRUE),
+    SE = sd(pct_R, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+round_means |>
+  ggplot(aes(x = round, y = M, color = condition, fill = condition)) +
+  geom_ribbon(aes(ymin = M - SE, ymax = M + SE), alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = COND_COLORS, labels = COND_LABELS) +
+  scale_fill_manual(values = COND_COLORS, labels = COND_LABELS, guide = "none") +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.3) +
+  annotate("text", x = N_ROUNDS, y = 100, label = "Optimal (100% R)",
+           hjust = 1, vjust = -0.5, size = 3, alpha = 0.5) +
+  labs(
+    x = "Round", y = "% Budget to R-Leaning Markets",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+```{r lmm}
+#| label: tbl-lmm
+#| tbl-cap: "Mixed-effects model: pct_R ~ condition × round + (1 + round | participant)"
+
+rounds_m <- rounds |>
+  mutate(
+    round_c = round - 1,  # center at round 1
+    cond_t = ifelse(condition == "treatment", 1, 0)
+  )
+
+if (n_distinct(rounds_m$submission_id) >= 4) {
+  lmm <- lmer(
+    pct_R ~ cond_t * round_c + (1 + round_c | submission_id),
+    data = rounds_m,
+    REML = FALSE
+  )
+
+  tidy(lmm, effects = "fixed", conf.int = TRUE) |>
+    mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+    gt() |>
+    cols_label(
+      term = "Predictor", estimate = "b", std.error = "SE",
+      statistic = "t", p.value = "p",
+      conf.low = "95% CI Low", conf.high = "95% CI High"
+    )
+} else {
+  cat("Too few participants for mixed model. Need >= 4.\n")
+  lmm <- NULL
+}
+```
+
+```{r lmm-interpretation}
+if (!is.null(lmm)) {
+  fe <- fixef(lmm)
+  cat("Interpretation:\n")
+  cat(sprintf("  Intercept (control, round 1): %.1f%%\n", fe["(Intercept)"]))
+  cat(sprintf("  Treatment effect at round 1: %.1f pp\n", fe["cond_t"]))
+  cat(sprintf("  Learning rate (control): %.1f pp/round\n", fe["round_c"]))
+  cat(sprintf("  Treatment × round interaction: %.1f pp/round\n", fe["cond_t:round_c"]))
+}
+```
+
+# Market-Level Allocation Over Rounds
+
+```{r market-allocation}
+#| label: fig-market-allocation
+#| fig-cap: "Mean allocation to each market over rounds, by condition"
+
+market_long <- rounds |>
+  pivot_longer(
+    cols = c(alloc_harlan, alloc_williamson, alloc_burlington, alloc_middlesex),
+    names_to = "market",
+    values_to = "allocation",
+    names_prefix = "alloc_"
+  )
+
+MARKET_LABELS <- c(
+  harlan = "Harlan, KY (R78%)", williamson = "Williamson, TN (R72%)",
+  burlington = "Burlington, VT (D68%)", middlesex = "Middlesex, MA (D72%)"
+)
+
+market_means <- market_long |>
+  group_by(condition, round, market) |>
+  summarize(M = mean(allocation, na.rm = TRUE), .groups = "drop")
+
+market_means |>
+  ggplot(aes(x = round, y = M / 1000, color = market)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 1.5) +
+  facet_wrap(~ condition, labeller = labeller(condition = COND_LABELS)) +
+  scale_color_manual(values = MARKET_COLORS, labels = MARKET_LABELS) +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  labs(x = "Round", y = "Mean Allocation ($k)", color = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+# Revenue: Does Treatment → More R Allocation → Higher Revenue?
+
+```{r revenue}
+#| label: fig-revenue
+#| fig-cap: "Cumulative revenue and % of optimal by condition"
+
+p_rev <- d |>
+  ggplot(aes(x = condition, y = game_cumulative_revenue / 1000, fill = condition)) +
+  geom_boxplot(alpha = 0.4, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4) +
+  scale_fill_manual(values = COND_COLORS, guide = "none") +
+  scale_x_discrete(labels = COND_LABELS) +
+  labs(x = NULL, y = "Cumulative Revenue ($k)") +
+  theme_minimal(base_size = 14)
+
+p_opt <- d |>
+  ggplot(aes(x = condition, y = game_pct_optimal, fill = condition)) +
+  geom_boxplot(alpha = 0.4, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4) +
+  scale_fill_manual(values = COND_COLORS, guide = "none") +
+  scale_x_discrete(labels = COND_LABELS) +
+  labs(x = NULL, y = "% of Optimal Revenue") +
+  theme_minimal(base_size = 14)
+
+p_rev + p_opt
+
+# t-tests (if enough data)
+if (can_infer) {
+  cat("Revenue:\n")
+  t.test(game_cumulative_revenue ~ condition, data = d) |> print()
+  cat("\n% Optimal:\n")
+  t.test(game_pct_optimal ~ condition, data = d) |> print()
+} else {
+  d |> group_by(condition) |>
+    summarize(M_rev = mean(game_cumulative_revenue), M_opt = mean(game_pct_optimal)) |>
+    print()
+}
+```
+
+## Mediation: Condition → pct_R → Revenue
+
+```{r mediation}
+#| label: tbl-mediation
+#| tbl-cap: "Mediation: condition → total pct_R → cumulative revenue (bootstrapped)"
+
+d_med <- d |>
+  mutate(cond_t = ifelse(condition == "treatment", 1, 0))
+
+med_model <- "
+  # a path: condition -> mediator
+  game_total_pct_R ~ a * cond_t
+
+  # b path: mediator -> outcome (controlling for condition)
+  game_cumulative_revenue ~ b * game_total_pct_R + c_prime * cond_t
+
+  # indirect effect
+  indirect := a * b
+
+  # total effect
+  total := c_prime + a * b
+"
+
+if (nrow(d_med) >= 10) {
+  med_fit <- sem(med_model, data = d_med, se = "bootstrap", bootstrap = 1000)
+  parameterEstimates(med_fit, boot.ci.type = "perc") |>
+    filter(label != "") |>
+    select(label, est, se, ci.lower, ci.upper, pvalue) |>
+    mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+    gt() |>
+    cols_label(
+      label = "Path", est = "Estimate", se = "SE",
+      ci.lower = "95% CI Low", ci.upper = "95% CI High", pvalue = "p"
+    )
+} else {
+  cat("Too few participants for mediation analysis. Need >= 10.\n")
+}
+```
+
+# Moderators
+
+## Extremity
+
+More extreme Democrats might have stronger (more biased) priors → larger room for the twin to correct.
+
+```{r extremity}
+#| label: fig-extremity
+#| fig-cap: "Treatment effect on pct_R moderated by political extremity"
+
+if (can_infer) {
+  m_ext <- lm(game_total_pct_R ~ condition * extremity, data = d)
+  tidy(m_ext, conf.int = TRUE) |>
+    mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+    gt()
+} else {
+  cat("Moderation analysis will appear once sufficient data is collected.\n")
+}
+
+d |>
+  ggplot(aes(x = extremity, y = game_total_pct_R, color = condition)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  scale_color_manual(values = COND_COLORS, labels = COND_LABELS) +
+  labs(x = "Political Extremity", y = "% Budget to R Markets", color = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+# Bonus (Real Money)
+
+```{r bonus}
+#| label: fig-bonus
+#| fig-cap: "Game bonus ($) by condition"
+
+d |>
+  ggplot(aes(x = condition, y = game_bonus, fill = condition)) +
+  geom_boxplot(alpha = 0.4, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4) +
+  scale_fill_manual(values = COND_COLORS, guide = "none") +
+  scale_x_discrete(labels = COND_LABELS) +
+  labs(x = NULL, y = "Bonus ($)") +
+  theme_minimal(base_size = 14)
+
+if (can_infer) {
+  t.test(game_bonus ~ condition, data = d) |> print()
+} else {
+  d |> group_by(condition) |> summarize(M_bonus = mean(game_bonus, na.rm = TRUE)) |> print()
+}
+```
+
+# Round-Level Decision Time
+
+```{r time}
+#| label: fig-time
+#| fig-cap: "Decision time (seconds) per round by condition"
+
+rounds |>
+  ggplot(aes(x = round, y = time_ms / 1000, color = condition)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 0.8) +
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  scale_color_manual(values = COND_COLORS, labels = COND_LABELS) +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  labs(x = "Round", y = "Decision Time (s)", color = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
