@@ -1,5 +1,117 @@
 # Comms
 
+## 2026-04-20 — Staircase Pilot v4: Human-human chat via Render app
+
+New survey: **`SV_2fbpWPjneZXf3wO`**
+- Preview: https://upenn.qualtrics.com/jfe/form/SV_2fbpWPjneZXf3wO
+- Edit: https://upenn.qualtrics.com/survey-builder/SV_2fbpWPjneZXf3wO/edit
+
+**What's new:**
+- Built a tiny pairing backend at `pilots/03_staircase_indifference/chat-pair-app/` — Express + Socket.IO, waiting-room queues keyed by party, Dem↔Rep cross-matches only, 3-min chat window, `postMessage` to Qualtrics on completion.
+- Smoke-tested locally: two clients (Dem + Rep) paired and echoed messages; two Dems correctly stayed unmatched.
+- Qualtrics human branch now iframes the deployed URL (`${HUMAN_CHAT_URL}/?party=…&outgroup=…&id=ResponseID`) and listens for `chat_ended`/`chat_continue` postMessages to gate the Next button.
+- Captures: `chat_start_ts`, `chat_end_ts`, `chat_end_reason` (one of `timeout`, `partnerLeft`, `noMatch`, `ended`).
+
+**Deploy steps (you):**
+1. Commit + push the repo (this one, no new repo needed).
+2. Render → New → **Web Service** → connect the repo → **Root Directory = `pilots/03_staircase_indifference/chat-pair-app`**. Runtime = Node (auto-detected). Free plan.
+3. Deploy. Note the URL.
+4. Set `HUMAN_CHAT_URL=https://your-url.onrender.com` in `.env` and re-run `pilots/03_staircase_indifference/create_survey.py`.
+5. Free tier spins down after 15 min idle; for a live pilot upgrade or ping `/healthz` every 10 min.
+
+**Open decisions:**
+- Matching timeout is 2 min; chat duration is 3 min (hardcoded in `server.js`). Change if you want.
+- In-memory state — restarts drop rooms. Fine for short pilots.
+
+## 2026-04-20 — Staircase Pilot v3: Bot iframe in; human still stubbed
+
+New survey: **`SV_eu1lOyOD9ve5IlU`** (v2 `SV_9LW8WXUvJGECK0e` superseded)
+
+- Preview: https://upenn.qualtrics.com/jfe/form/SV_eu1lOyOD9ve5IlU
+- Edit: https://upenn.qualtrics.com/survey-builder/SV_eu1lOyOD9ve5IlU/edit
+
+**What's new:**
+- Bot condition now embeds `https://reframe001-7a186c892e5e.herokuapp.com/?condition=twin_{democrat|republican}&id={ResponseID}` as an iframe with a sticky 3-min countdown. Continue button hidden until timer ends. Captures `chat_start_ts`, `chat_end_ts`.
+- Human condition = placeholder page (clearly labeled "matching not available, TBD") + a Continue button. Captures `chat_human_placeholder_shown=1` so you can filter those out of analysis.
+
+**Decision you owe me for human-human matching:** Qualtrics alone can't do this (each session is stateless, no participant-to-participant channel). Cleanest paths:
+- **Tiny Render app w/ WebSockets** — Waiting queue + pair + 3-min chat + return to Qualtrics. ~1-2 hr. Uses `render-survey` skill. Same infra as your other apps.
+- **Firebase Realtime DB from Qualtrics JS** — No backend to deploy. Client-side matching logic. Lighter but introduces a dep.
+- **Extend the reframe Heroku app** — Add a `condition=human_pair` mode to the existing app. Keeps infra consolidated; I'd need the app's source.
+
+Reply with which path and I'll ship it.
+
+## 2026-04-17 17:25 — Staircase Pilot v2: Mortality-Only + Real Task
+
+Rebuilt per your revised scope. New survey ID: **`SV_9LW8WXUvJGECK0e`**.
+
+- Preview: https://upenn.qualtrics.com/jfe/form/SV_9LW8WXUvJGECK0e
+- Edit:    https://upenn.qualtrics.com/survey-builder/SV_9LW8WXUvJGECK0e/edit
+
+**What changed:**
+- Only 1 task left: mortality (removed math, slider, counting)
+- Consent + instructions rewritten: choices are REAL, participant actually does what they pick
+- Added real mortality reflection block with classic Rosenblatt TMT prompts + sticky countdown timer (duration = `mortality_threshold` from staircase). Writing auto-saves to `mortality_response` every 5 s + on input; continue button is hidden until timer hits 0.
+- Branch logic routes by `final_pick`:
+  - `final_pick == "mortality"` → Mortality Reflection block → End
+  - `final_pick == "chat"` → End block saying "we'll send you to the conversation now"
+
+**Your to-do to ship this:**
+1. **Configure end-of-survey redirect URL** (Qualtrics → Survey Options → End of Survey). That's the hook where participants who picked chat get sent to your conversation system. You can pipe `${e://Field/outgroup_label}`, `${e://Field/chat_partner}`, `${e://Field/ResponseID}` into the redirect URL.
+2. **Delete the old pilot** (`SV_6u0w8nWPlYAr8fI`) — I left it so you can diff, but it's superseded.
+3. **Click through the preview once.** I couldn't smoke-test (Chrome extension wasn't connected). Sanity checks: (a) taste trial shows age input, (b) staircase shows 3-min chat card vs variable-minute mortality card, (c) final pick shows 2 cards, (d) if you pick mortality, you see TMT prompts + 3-min timer, (e) text you type in the textarea saves to `mortality_response`.
+
+**Key embedded data captured:**
+- `chat_partner` (human | bot)
+- `outgroup_label` (Republican | Democrat)
+- `mortality_threshold` (minutes, staircase indifference)
+- `mortality_trials` (JSON array of per-trial choices)
+- `final_pick` (chat | mortality), `final_pick_duration`
+- `mortality_response`, `mortality_response_chars`, `mortality_start_ts`, `mortality_end_ts`
+
+## 2026-04-17 17:00 — Staircase Indifference Pilot: Built & Activated
+
+BenBen — the survey is live. Files in `pilots/03_staircase_indifference/create_survey.py`.
+
+**Survey ID:** `SV_6u0w8nWPlYAr8fI`
+- Preview: https://upenn.qualtrics.com/jfe/form/SV_6u0w8nWPlYAr8fI
+- Edit:    https://upenn.qualtrics.com/survey-builder/SV_6u0w8nWPlYAr8fI/edit
+
+**Design decisions I made (revise as needed):**
+1. **Party ID is 2-option** (Democrat/Republican). Independents have no clean outgroup; happy to add an "Independent, leans ___" branch if you want it.
+2. **Outgroup label is computed in JS** from the party question's piped text, not via survey-flow branches. Cleaner, no manual step.
+3. **chat_partner randomizer is even/50-50** between "human" and "bot". Bot condition shows "Talk to a [Rep/Dem] AI"; human shows "Talk to a [Rep/Dem]".
+4. **Final task routing is stubbed**: after the final pick, I show a thank-you page that displays the pick + duration. I did **not** wire real chat or TMT-writing because (a) your instructions page explicitly says "your choices here are hypothetical" and (b) real chat routing needs infra we don't have yet. Tell me if you want me to add: (i) a bot chat iframe (Heroku app, like in pilots/02), (ii) a real TMT writing prompt w/ timer, (iii) a redirect URL for human-chat pairing.
+5. **Staircase params** (from your JS): start at 10 min, step 5 halving on reversals, min 0.5 min, max 30, stops at 8 trials or 3 small reversals. Indifference = mean of last two reversals.
+
+**Known gaps you should verify:**
+- Consent is passive (just a descriptive page + Next). If IRB wants an explicit "I consent: Yes/No" with a No-→end branch, flag it and I'll add it.
+- I couldn't smoke-test in a live browser (Chrome extension wasn't connected on my side). **Please click through the preview URL once** and flag anything weird.
+- Embedded data written by JS at runtime: `task_order`, `{math,mortality,slider,counting}_{threshold,trials}`, `final_pick`, `final_pick_duration`.
+
+## 2026-03-27 — Game Experiment: No Learning, Redesign Needed
+
+BenBen, here's the summary of our analysis session:
+
+**Current state:** N=37 completed (still collecting ~5/hr). Data shows **zero treatment effect** and **zero learning**.
+
+**Treatment effect:** d = -0.04 on trial 1 (the cleanest measure). Overall d = -0.22 across all rounds, driven entirely by a random spike at round 5.
+
+**Learning:** Slope = +0.71 pp/round, p = .40. Compare to the pilot (N=150) which had slope = 3.09 pp/round, p < .0001 and a +27pp total shift. Current study: +4.6pp total. People are not learning which markets are better.
+
+**Root cause:** Competition labels dominate the task. The exp(-2×competition) term creates a 3.7× revenue difference between best/worst markets. Receptivity gap is only 10pp and goes the wrong direction (Dems more receptive). Both conditions can solve the game from competition cues alone — the chatbot belief update is irrelevant to the optimal strategy.
+
+**Bot transcripts:** Many treatment participants never discussed energy products. Those who did often had their stereotypes *confirmed* by the sycophantic bot. Several participants chatted about marsupials, cats, or Trump for 5 minutes.
+
+**Recommendation:** Pause collection and redesign. Key options:
+1. Equalize competition across markets (so receptivity beliefs drive decisions)
+2. Single allocation decision (no feedback, pure belief measure)
+3. Remove competition labels entirely
+
+**Email sent to team (2026-03-26):** Updated Noah/Olivier/Stefano on game pilot results, pre-post immigration replication, bot sycophancy issue, bot validity findings, and twin typicality study idea.
+
+---
+
 ## 2026-03-24 — Game Experiment Analysis Pipeline Ready
 
 BenBen, the analysis QMD for the game experiment is at `studies/02_experimental/game_analysis.qmd`. It renders to a self-contained HTML.

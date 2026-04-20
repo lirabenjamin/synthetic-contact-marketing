@@ -1,11 +1,34 @@
 # Todo
 
+## Staircase Indifference Pilot
+- [x] v1 (4 tasks) — `SV_6u0w8nWPlYAr8fI` (superseded)
+- [x] v2 (mortality + TMT + real framing) — `SV_9LW8WXUvJGECK0e` (superseded)
+- [x] v3 (bot iframe) — `SV_eu1lOyOD9ve5IlU` (superseded)
+- [x] v4 (bot + human-human via Render app) — `SV_2fbpWPjneZXf3wO`
+- [x] Build Render pair-chat backend (`chat-pair-app/`) + smoke-test locally
+- [ ] **Deploy chat-pair-app to Render**, paste URL into `HUMAN_CHAT_URL`, re-run `create_survey.py`
+- [ ] Smoke-test preview URL
+- [ ] Delete old pilots `SV_6u0w8nWPlYAr8fI`, `SV_9LW8WXUvJGECK0e`, `SV_eu1lOyOD9ve5IlU`
+
 ## S2 Game Experiment (MongoDB: synthetic-contact/participants)
 - [x] Pull data from MongoDB and inspect structure
 - [x] Write analysis QMD (`studies/02_experimental/game_analysis.qmd`)
 - [x] Render with test data (N=2) — renders clean
-- [ ] Re-render once real data is collected (remove test-data guards)
+- [x] Re-render with real data (N=32 → 37 completed)
+- [x] Analyze round-by-round learning (result: no learning, slope = 0.71 pp/round, p = .40)
+- [x] Compare to pilot (N=150): pilot had 3.09 pp/round learning, current has none
+- [x] Pull and review chatbot transcripts from PostgreSQL
+- [x] Diagnose root cause: competition cues dominate, making chatbot belief update irrelevant
+- [ ] **Pause data collection on Connect** ← DO THIS
+- [ ] Redesign game (equalize competition, or single-shot allocation)
+- [ ] Pilot revised version
 - [ ] Write up results for paper
+
+## Pre-Post Immigration Study (Connect)
+- [x] Data collection running
+- [x] Preliminary results: replicates green attitudes findings
+- [ ] Share full results with team
+- [ ] Write up for paper
 
 ## Race-Based Twins Study (new — J&V extension)
 - [x] Read Jacob & Vieites (2026) paper and extract DVs
