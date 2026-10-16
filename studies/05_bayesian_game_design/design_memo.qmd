@@ -1,0 +1,99 @@
+---
+title: "Multi-round allocation game: design choice backed by simulation"
+subtitle: "Ideal Bayesian learner, parameter recovery, and power for four candidate designs"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({library(dplyr); library(tidyr); library(knitr)})
+rec <- read.csv("output/recovery.csv")
+pw <- read.csv("output/power.csv")
+k <- read.csv("output/constants.csv")
+kv <- setNames(k$value, k$quantity)
+pct <- function(x) paste0(round(100 * x), "%")
+f2 <- function(x) sprintf("%.2f", x)
+pw_at <- function(v, n, t) pw$power[pw$variant == v & pw$n == n & pw$test == t]
+rec_of <- function(v, col) rec[[col]][rec$variant == v]
+v2e <- "2-market + belief reports"
+v2a <- "2-market, allocation only"
+v4e <- "4-market + belief reports"
+v4a <- "4-market, allocation only"
+```
+
+## Decision for Ben
+
+The 8-round pilot (March 24 to 26, N = 50) showed no round-1 condition effect and no learning. This memo simulates a redesigned game before launch. It answers one question: **which design lets us estimate each participant's prior and learning rate well enough to compare conditions?** Pick a design, then say whether to adapt the existing app or rebuild the game.
+
+**Recommendation: two markets plus a belief report every round.** Three results drive it:
+
+1. **Belief reports matter most.** With 200 participants per condition, the twin-vs-control test on the prior mean (H1) has `r pct(pw_at(v2e, 200, "H1_mu0_model"))` power with belief reports and `r pct(pw_at(v2a, 200, "H1_mu0_model"))` without them.
+2. **The learning-rate test (H2) is underpowered in every design.** Even at 400 per condition, power peaks at `r pct(max(pw$power[pw$test == "H2_n0_model"]))`. Prior strength is hard to recover from 10 rounds: the best Spearman *r* between true and estimated values is `r f2(max(rec$rho_ln0))`. Treat H2 as exploratory unless the game gets more rounds or the effect is larger than *d* = 0.30.
+3. **The payoff surface is flat.** Under the S-curve, the revenue-maximising share moves only from `r pct(kv["share_R_at_control_prior_mean"])` (control prior) to `r pct(kv["optimal_share_R_true"])` (truth). Allocations alone therefore carry little information about beliefs. A steeper payoff (a smaller half-saturation point or a larger size gap between markets) would raise power for the allocation-only tests.
+
+## Why the current game cannot show learning about Republicans
+
+In the current 4-market engine, payoffs depend far more on hidden competition than on party receptivity. Across the four towns, log receptivity varies with SD `r f2(kv["sd_log_receptivity_current_engine"])`, while the competition penalty varies with SD `r f2(kv["sd_log_competition_current_engine"])`. Revenue feedback therefore teaches participants about competition, which the twin chat says nothing about. The redesign makes party receptivity the only hidden driver of payoff.
+
+## The redesigned game and the learner model
+
+- **Two markets**, one R-leaning (60,000 households) and one D-leaning (40,000), equal competition, same S-curve as today. True receptivity is equal across parties.
+- **10 rounds**, \$100,000 per round, at least 5% to each market so both markets always return feedback.
+- **Learner.** Each participant holds a belief about R receptivity relative to D (log ratio). The belief starts at a prior mean (*mu0*) with a prior strength (*n0*, in rounds of feedback). After each round, the belief moves toward the observed revenue ratio by 1 / (*n0* + round). A high *n0* means slow learning.
+- **Choice.** Participants allocate the revenue-maximising share for their current belief, plus noise (SD = 10 points of budget).
+- **Optional belief report.** Each round, before allocating, participants state how many of 100 households in each market would buy.
+
+Under the true parameters, the best plan puts `r pct(kv["optimal_share_R_true"])` of the budget into the R market. A participant at the assumed control prior puts `r pct(kv["share_R_at_control_prior_mean"])` there, and one at the assumed twin prior puts `r pct(kv["share_R_at_twin_prior_mean"])`.
+
+**Planning assumptions (not data).** Control participants believe Republicans are 60% as receptive as Democrats (SD 0.35 on the log ratio) and hold that belief with a strength of about 4 rounds of feedback. The twin chat shifts the prior mean by *d* = 0.30 (H1) and weakens prior strength by *d* = 0.30 (H2). The 4-market variants add the hidden-competition noise of the current engine to every round of feedback.
+
+![Simulated share of budget to the R market, by round (2-market design with belief reports, `r kv["n_pool_per_cond"]` simulated participants per condition).](output/simulated_trajectories.png)
+
+## Parameter recovery
+
+Recovery is the correlation between each simulated participant's true parameter and the value the model estimates from their 10 rounds. Values near 1 mean the design can measure the parameter for individuals.
+
+```{r tbl-recovery}
+rec |>
+  transmute(Design = variant,
+            `Prior mean, r` = f2(r_mu0),
+            `Prior strength, Spearman r` = f2(rho_ln0),
+            `Prior strength at bound` = pct(pct_ln0_at_bound)) |>
+  kable()
+```
+
+## Power
+
+Power is the share of `r kv["n_resamples"]` resampled experiments with *p* < .05 (Wilcoxon test, twin vs. control). H1 is tested two ways: on the model's prior mean, and model-free on round-1 allocation.
+
+```{r tbl-power}
+pw |>
+  mutate(test = recode(test, H1_mu0_model = "H1: prior mean (model)",
+                       H2_n0_model = "H2: prior strength (model)",
+                       H1_round1_share = "H1: round-1 share (model-free)"),
+         power = pct(power)) |>
+  pivot_wider(names_from = n, values_from = power, names_prefix = "N/cell = ") |>
+  rename(Design = variant, Test = test) |>
+  kable()
+```
+
+## Reading the results
+
+- **H1 (prior mean)** at 200 per cell: `r pct(pw_at(v2e, 200, "H1_mu0_model"))` power with the 2-market design and belief reports, versus `r pct(pw_at(v4a, 200, "H1_mu0_model"))` with today's 4-market layout and allocations only.
+- **H2 (learning rate)** at 400 per cell: `r pct(pw_at(v2e, 400, "H2_n0_model"))` power with the 2-market design and belief reports, versus `r pct(pw_at(v4a, 400, "H2_n0_model"))` with the 4-market layout and allocations only.
+- **Model-free round-1 test** at 200 per cell with the 2-market design: `r pct(pw_at(v2e, 200, "H1_round1_share"))`.
+
+## Open choices for Ben
+
+1. **Design:** 2-market or 4-market; with or without per-round belief reports.
+2. **Build:** adapt the existing chat-plus-game app minimally (swap the market table and payoff, add the belief question, log per-market revenue each round) or rebuild the game.
+3. **Assumptions to check:** the H1 and H2 effect sizes (*d* = 0.30) and the 10-point allocation noise drive every power number above. The March pilot data in MongoDB can calibrate allocation noise before launch.
+
+Code: `simulate.R` (writes `output/`). Rerun with `Rscript simulate.R output`.

@@ -1,0 +1,10 @@
+"quantity","value"
+"optimal_share_R_true",0.55
+"share_R_at_control_prior_mean",0.485
+"share_R_at_twin_prior_mean",0.5
+"sig_e_2mkt",0.424264068711929
+"sig_e_4mkt",0.69940450861191
+"sd_log_receptivity_current_engine",0.0375097164360109
+"sd_log_competition_current_engine",0.556027577253743
+"n_pool_per_cond",1500
+"n_resamples",500
