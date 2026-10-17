@@ -1,0 +1,796 @@
+---
+title: "Green Market Game: Calibration Pilot"
+subtitle: "Can a marketing game serve as a DV for synthetic contact experiments?"
+format:
+  html:
+    self-contained: true
+    toc: true
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(arrow)
+library(patchwork)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+
+# Remap "difficulty" to neutral version labels (the manipulation was flawed)
+VERSION_LABELS <- c(easy = "Version A", medium = "Version B", hard = "Version C")
+VERSION_COLORS <- c(easy = "#22c55e", medium = "#f59e0b", hard = "#ef4444")
+
+MARKET_COLORS <- c(
+  harlan = "#dc2626", williamson = "#f97316",
+  burlington = "#3b82f6", middlesex = "#1d4ed8"
+)
+MARKET_LABELS <- c(
+  harlan = "Harlan, KY (78% R)", williamson = "Williamson, TN (72% R)",
+  burlington = "Burlington, VT (68% D)", middlesex = "Middlesex, MA (72% D)"
+)
+PARTY_COLORS <- c(
+  "Strong Democrat" = "#1d4ed8", "Lean Democrat" = "#60a5fa",
+  "Independent" = "#9ca3af",
+  "Lean Republican" = "#f87171", "Strong Republican" = "#dc2626"
+)
+PARTY_LEAN_COLORS <- c(Democrat = "#2563eb", Independent = "#9ca3af", Republican = "#dc2626")
+
+is_running_in_quarto <- function() {
+  Sys.getenv("QUARTO_DOCUMENT_PATH") != ""
+}
+
+if (is_running_in_quarto()) {
+  d <- read_parquet("clean_data.parquet")
+  rounds <- read_parquet("round_data.parquet")
+} else {
+  d <- read_parquet("pilots/green-market-game/clean_data.parquet")
+  rounds <- read_parquet("pilots/green-market-game/round_data.parquet")
+}
+
+# Add version labels
+d <- d |> mutate(version = VERSION_LABELS[as.character(difficulty)])
+rounds <- rounds |> mutate(version = VERSION_LABELS[as.character(difficulty)])
+```
+
+```{r precompute}
+#| include: false
+
+# ── Pre-compute all stats used in prose ──────────────────────────────────────
+pooled_t <- t.test(d$alloc_shift, mu = 0)
+pooled_d <- mean(d$alloc_shift, na.rm = TRUE) / sd(d$alloc_shift, na.rm = TRUE)
+pooled_gap <- t.test(d$gap_change, mu = 0)
+pooled_gap_d <- mean(d$gap_change, na.rm = TRUE) / sd(d$gap_change, na.rm = TRUE)
+bias_cor <- cor.test(d$pre_pct_R, d$alloc_shift)
+rev_anova <- aov(game_cumulative_revenue ~ party_lean, data = d |> filter(!is.na(party_lean)))
+party_lean_n <- d |> count(party_lean)
+
+# Mixed effects model for learning curves
+rounds_m <- rounds |> filter(!is.na(party_lean)) |> mutate(round_c = round - 1)
+lmm <- lmer(pct_R ~ round_c * party_lean + round_c * difficulty + (1 + round_c | id),
+            data = rounds_m, REML = FALSE)
+lmm_anova <- anova(lmm, type = 3)
+lmm_fe <- fixef(lmm)
+
+# Bayesian learning curve fits to group means (with grid-search fallback)
+fit_bayes <- function(data) {
+  gm <- data |> group_by(round) |> summarize(pct_R = mean(pct_R, na.rm = TRUE), .groups = "drop")
+  fit <- tryCatch(
+    nls(pct_R ~ theta + (m0 - theta) * tau / (tau + round),
+        data = gm,
+        start = list(m0 = gm$pct_R[1] - 5, theta = tail(gm$pct_R, 1) + 5, tau = 1.5),
+        control = nls.control(maxiter = 500)),
+    error = function(e) NULL
+  )
+  if (!is.null(fit)) return(fit)
+  best_rss <- Inf; best_p <- NULL
+  for (m0 in seq(gm$pct_R[1] - 40, gm$pct_R[1] + 5, by = 2.5)) {
+    for (theta in seq(tail(gm$pct_R, 1) - 10, tail(gm$pct_R, 1) + 15, by = 2)) {
+      for (tau in seq(0.05, 5, by = 0.05)) {
+        pred <- theta + (m0 - theta) * tau / (tau + gm$round)
+        rss <- sum((gm$pct_R - pred)^2)
+        if (rss < best_rss) { best_rss <- rss; best_p <- c(m0 = m0, theta = theta, tau = tau) }
+      }
+    }
+  }
+  tryCatch(
+    nls(pct_R ~ theta + (m0 - theta) * tau / (tau + round), data = gm,
+        start = as.list(best_p), control = nls.control(maxiter = 500)),
+    error = function(e) {
+      structure(list(coefs = best_p, rss = best_rss, gm = gm), class = "grid_fit")
+    }
+  )
+}
+coef.grid_fit <- function(x, ...) x$coefs
+residuals.grid_fit <- function(x, ...) {
+  p <- x$coefs; x$gm$pct_R - (p["theta"] + (p["m0"] - p["theta"]) * p["tau"] / (p["tau"] + x$gm$round))
+}
+
+bayes_by_party <- map(set_names(c("Democrat", "Independent", "Republican")),
+                      \(pl) fit_bayes(rounds |> filter(party_lean == pl)))
+
+# Interaction test (pre-post design)
+mod_main <- lm(alloc_shift ~ difficulty + party_lean, data = d |> filter(!is.na(party_lean)))
+mod_int <- lm(alloc_shift ~ difficulty * party_lean, data = d |> filter(!is.na(party_lean)))
+int_test <- anova(mod_main, mod_int)
+```
+
+## Executive Summary
+
+```{r}
+#| include: false
+r1_pctR <- round(mean(rounds$pct_R[rounds$round == 1], na.rm = TRUE))
+r8_pctR <- round(mean(rounds$pct_R[rounds$round == 8], na.rm = TRUE))
+```
+
+1. **The game produces robust learning.** Participants shifted budget allocations toward R-leaning markets by `r round(mean(d$alloc_shift, na.rm = TRUE), 1)` pp (*d* = `r round(pooled_d, 2)`, *p* `r ifelse(pooled_t$p.value < .001, "< .001", paste0("= ", round(pooled_t$p.value, 3)))`), and revised their perceived D-R eco-receptivity gap by `r round(abs(mean(d$gap_change, na.rm = TRUE)), 1)` pp.
+
+2. **A Bayesian learning model fits the data well.** Round-by-round allocations follow a precision-weighted updating rule: participants start at ~`r r1_pctR`% and converge to ~`r r8_pctR`% allocated to R-markets, with most learning in the first 3 rounds.
+
+3. **Democrats start with more biased priors but learn at similar rates.** Republicans allocate `r round(lmm_fe["party_leanRepublican"], 1)` pp more to R-markets from round 1, but Democrats close this gap through gameplay. Learning rate does not differ by party (*p* = `r round(lmm_anova["round_c:party_lean", "Pr(>F)"], 2)`).
+
+4. **The "difficulty" manipulation was confounded and should be redesigned.** It simultaneously changed noise, competition steepness, and saturation thresholds. Because higher competition steepness amplifies the relative R-vs-D signal, harder versions actually made it *easier* to identify the optimal strategy, offsetting the noise increase. All three versions produced equivalent learning. For the main study, difficulty should vary noise *only*.
+
+5. **Starting bias is the strongest predictor of learning.** Those who initially under-allocated to R-markets showed the largest corrections (*r* = `r round(bias_cor$estimate, 2)`), consistent with the Bayesian model's prediction that agents with imprecise priors update more.
+
+6. **Verdict: this game is a viable DV for synthetic contact experiments.** It produces large, measurable learning effects (*d* = `r round(pooled_d, 2)`) with clear individual differences in starting priors that correlate with political identity — exactly the lever a chatbot intervention would need to pull.
+
+---
+
+# The Game Produces Robust Learning
+
+## How revenue is generated
+
+Participants played 8 rounds of a marketing allocation game, distributing a $100k budget across 4 U.S. markets to sell eco-friendly products. Each round, revenue for a given market is computed as:
+
+$$\text{Revenue} = \underbrace{\text{receptive population}}_{\text{market size} \times \text{weighted receptivity}} \times \underbrace{f(\text{spend})}_{\text{diminishing returns}} \times \underbrace{e^{-K \times \text{competition}}}_{\text{competition discount}} \times \$7 + \varepsilon$$
+
+where:
+
+- **Receptive population** = market size $\times$ (% Republican $\times$ 0.65 + % Democrat $\times$ 0.75). Both parties are somewhat receptive to eco products, but Democrats slightly more so (75% vs 65%).
+- **Diminishing returns**: spending follows a log-saturation curve — the first dollars in a market generate more than the last.
+- **Competition discount**: $e^{-K \times c}$, where $c$ is the market's competition level. Low-competition markets (Harlan: $c$ = 0.20) retain most of the spend; high-competition markets (Middlesex: $c$ = 0.85) lose most of it.
+- **Noise** ($\varepsilon$): Gaussian noise proportional to mean revenue.
+
+The key insight: even though D-leaning markets have slightly higher eco-receptivity, their high competition levels eat into returns. R-leaning markets, with low competition, generate more revenue per dollar. The optimal strategy is to overweight R-leaning markets — the opposite of what most participants' political priors suggest.
+
+```{r market-summary}
+tibble(
+  Market = c("Harlan, KY", "Williamson, TN", "Burlington, VT", "Middlesex, MA"),
+  `Partisan lean` = c("78% R", "72% R", "68% D", "72% D"),
+  `Market size` = c("50k", "75k", "45k", "65k"),
+  Competition = c("Low (0.20)", "Moderate (0.35)", "Moderate (0.45)", "Very high (0.85)"),
+  `Net effect` = c("High ROI", "High ROI", "Moderate ROI", "Low ROI")
+) |> knitr::kable(caption = "Market characteristics: competition, not receptivity, drives returns")
+```
+
+## Pre-post allocation shift
+
+```{r fig-alloc-shift, fig.width=9, fig.height=4}
+#| fig-cap: "Pre- vs. post-game stated allocation to R-leaning areas"
+
+p1 <- d |>
+  pivot_longer(cols = c(pre_pct_R, post_pct_R),
+               names_to = "time", values_to = "pct_R") |>
+  mutate(time = factor(time,
+    levels = c("pre_pct_R", "post_pct_R"),
+    labels = c("Pre-game", "Post-game")
+  )) |>
+  ggplot(aes(x = time, y = pct_R, group = id)) +
+  geom_line(alpha = 0.15, color = "grey40") +
+  stat_summary(aes(group = version, color = version),
+    fun = mean, geom = "line", linewidth = 2
+  ) +
+  stat_summary(aes(group = version, color = version),
+    fun = mean, geom = "point", size = 4
+  ) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "grey50") +
+  facet_wrap(~version) +
+  scale_color_manual(values = setNames(VERSION_COLORS, VERSION_LABELS), guide = "none") +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = NULL, y = "% to R-leaning areas")
+
+p2 <- d |>
+  ggplot(aes(x = version, y = alloc_shift, fill = version)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 1.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_fill_manual(values = setNames(VERSION_COLORS, VERSION_LABELS), guide = "none") +
+  labs(x = NULL, y = "Allocation shift (pp)")
+
+p1 + p2 + plot_layout(widths = c(2, 1))
+```
+
+```{r alloc-shift-stats}
+alloc_tests <- d |>
+  group_by(version) |>
+  summarize(
+    n = n(),
+    mean_pre = mean(pre_pct_R, na.rm = TRUE),
+    mean_post = mean(post_pct_R, na.rm = TRUE),
+    mean_shift = mean(alloc_shift, na.rm = TRUE),
+    sd_shift = sd(alloc_shift, na.rm = TRUE),
+    t_stat = t.test(alloc_shift)$statistic,
+    p_value = t.test(alloc_shift)$p.value,
+    d = mean(alloc_shift, na.rm = TRUE) / sd(alloc_shift, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+alloc_tests |>
+  mutate(across(where(is.numeric), \(x) round(x, 3))) |>
+  knitr::kable(caption = "Allocation shift: one-sample t-test (shift ≠ 0)")
+```
+
+Pooled across versions, participants shifted their allocations by `r round(mean(d$alloc_shift, na.rm = TRUE), 1)` pp toward R-leaning markets (*t*(`r pooled_t$parameter`) = `r round(pooled_t$statistic, 2)`, *p* `r ifelse(pooled_t$p.value < .001, "< .001", paste0("= ", round(pooled_t$p.value, 3)))`, *d* = `r round(pooled_d, 2)`). All three versions produced significant shifts.
+
+## Belief revision
+
+```{r fig-belief-shift, fig.width=9, fig.height=5}
+#| fig-cap: "Pre- vs. post-game perceived eco-receptivity for Democrats and Republicans"
+
+d |>
+  select(id, version,
+    `Dem (pre)` = pre_belief_dem, `Dem (post)` = post_belief_dem,
+    `Rep (pre)` = pre_belief_rep, `Rep (post)` = post_belief_rep
+  ) |>
+  pivot_longer(-c(id, version), names_to = "measure", values_to = "pct") |>
+  separate(measure, into = c("party", "time"), sep = " \\(") |>
+  mutate(time = str_remove(time, "\\)"),
+         time = factor(time, levels = c("pre", "post"))) |>
+  group_by(version, party, time) |>
+  summarize(mean_pct = mean(pct, na.rm = TRUE),
+            se = sd(pct, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") |>
+  ggplot(aes(x = time, y = mean_pct, color = party, group = party)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_pct - 1.96 * se, ymax = mean_pct + 1.96 * se),
+                width = 0.1, linewidth = 0.8) +
+  facet_wrap(~version) +
+  scale_color_manual(values = c(Dem = "#2563eb", Rep = "#dc2626")) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = NULL, y = "Perceived % who would buy eco products", color = NULL)
+```
+
+```{r belief-gap-stats}
+gap_tests <- d |>
+  group_by(version) |>
+  summarize(
+    `Pre gap (D-R)` = mean(pre_belief_gap, na.rm = TRUE),
+    `Post gap (D-R)` = mean(post_belief_gap, na.rm = TRUE),
+    `Gap change` = mean(gap_change, na.rm = TRUE),
+    t = t.test(gap_change)$statistic,
+    p = t.test(gap_change)$p.value,
+    d = mean(gap_change, na.rm = TRUE) / sd(gap_change, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+gap_tests |>
+  mutate(across(where(is.numeric), \(x) round(x, 2))) |>
+  knitr::kable(caption = "Perceived D-R receptivity gap: does it shrink?")
+```
+
+The perceived D-R gap shrank by `r round(abs(mean(d$gap_change, na.rm = TRUE)), 1)` pp (*t*(`r pooled_gap$parameter`) = `r round(pooled_gap$statistic, 2)`, *p* `r ifelse(pooled_gap$p.value < .001, "< .001", paste0("= ", round(pooled_gap$p.value, 3)))`, *d* = `r round(pooled_gap_d, 2)`), driven by upward revision of Republican eco-receptivity (+`r round(mean(d$belief_shift_rep, na.rm = TRUE), 1)` pp) and comparable downward revision of Democrat eco-receptivity (`r round(mean(d$belief_shift_dem, na.rm = TRUE), 1)` pp).
+
+```{r effect-sizes}
+es_tab <- d |>
+  summarize(
+    `Allocation shift` = mean(alloc_shift, na.rm = TRUE) / sd(alloc_shift, na.rm = TRUE),
+    `Rep belief shift` = mean(belief_shift_rep, na.rm = TRUE) / sd(belief_shift_rep, na.rm = TRUE),
+    `Dem belief shift` = mean(belief_shift_dem, na.rm = TRUE) / sd(belief_shift_dem, na.rm = TRUE),
+    `D-R gap shrinkage` = mean(gap_change, na.rm = TRUE) / sd(gap_change, na.rm = TRUE),
+  ) |>
+  pivot_longer(everything(), names_to = "Measure", values_to = "Cohen's d") |>
+  mutate(`Cohen's d` = round(`Cohen's d`, 2))
+
+es_tab |> knitr::kable(caption = "Effect sizes (pooled across versions)")
+```
+
+---
+
+# Bayesian Learning Model
+
+## The model
+
+Participants enter the game with a prior belief about the optimal share to allocate to R-leaning markets. Each round, revenue feedback provides a noisy signal about the true optimal allocation. Under a standard Normal-Normal Bayesian updating framework (Erdem & Keane, 1996; DeGroot, 1970), the posterior allocation at round $t$ follows:
+
+$$\text{pct\_R}_t = \theta^* + (m_0 - \theta^*) \cdot \frac{\tau}{\tau + t}$$
+
+where:
+
+- $m_0$ = **prior** — the agent's initial belief about optimal R-allocation (before any gameplay)
+- $\theta^*$ = **asymptote** — what the agent converges to with infinite experience
+- $\tau$ = **learning speed** — the number of rounds needed to halve the weight on the prior (lower $\tau$ = faster learning). Formally, $\tau = \sigma_s^2 / \sigma_0^2$, the ratio of signal noise to prior variance
+
+The weight on the prior at round $t$ is $w_t = \tau / (\tau + t)$, which decays hyperbolically — fast at first, then more slowly.
+
+## Model fit
+
+```{r bayesian-fit}
+# Fit to group means by party
+fit_bayes_curve <- function(data) {
+  gm <- data |> group_by(round) |> summarize(pct_R = mean(pct_R, na.rm = TRUE), .groups = "drop")
+  fit <- tryCatch(
+    nls(pct_R ~ theta + (m0 - theta) * tau / (tau + round),
+        data = gm, start = list(m0 = gm$pct_R[1] - 5, theta = tail(gm$pct_R, 1) + 5, tau = 1.5),
+        control = nls.control(maxiter = 500)),
+    error = function(e) NULL
+  )
+  if (!is.null(fit)) return(fit)
+  # Grid search fallback
+  best_rss <- Inf; best_p <- NULL
+  for (m0 in seq(gm$pct_R[1] - 40, gm$pct_R[1] + 5, by = 2.5)) {
+    for (theta in seq(tail(gm$pct_R, 1) - 10, tail(gm$pct_R, 1) + 15, by = 2)) {
+      for (tau in seq(0.05, 5, by = 0.05)) {
+        pred <- theta + (m0 - theta) * tau / (tau + gm$round)
+        rss <- sum((gm$pct_R - pred)^2)
+        if (rss < best_rss) { best_rss <- rss; best_p <- c(m0 = m0, theta = theta, tau = tau) }
+      }
+    }
+  }
+  tryCatch(
+    nls(pct_R ~ theta + (m0 - theta) * tau / (tau + round), data = gm,
+        start = as.list(best_p), control = nls.control(maxiter = 500)),
+    error = function(e) structure(list(coefs = best_p, rss = best_rss, gm = gm), class = "grid_fit")
+  )
+}
+coef.grid_fit <- function(x, ...) x$coefs
+residuals.grid_fit <- function(x, ...) {
+  p <- x$coefs; x$gm$pct_R - (p["theta"] + (p["m0"] - p["theta"]) * p["tau"] / (p["tau"] + x$gm$round))
+}
+
+bayes_party <- map_dfr(c("Democrat", "Independent", "Republican"), function(pl) {
+  fit <- fit_bayes_curve(rounds |> filter(party_lean == pl))
+  cc <- coef(fit)
+  gm <- rounds |> filter(party_lean == pl) |> group_by(round) |>
+    summarize(pct_R = mean(pct_R, na.rm = TRUE), .groups = "drop")
+  rss <- sum(residuals(fit)^2)
+  r2 <- 1 - rss / sum((gm$pct_R - mean(gm$pct_R))^2)
+  tibble(party_lean = pl, m0 = cc["m0"], theta = cc["theta"], tau = cc["tau"], r2 = r2)
+})
+```
+
+```{r bayesian-fit-table}
+bayes_party |>
+  transmute(Group = party_lean, `Prior (m₀)` = m0, `Asymptote (θ*)` = theta,
+            `Learning speed (τ)` = tau, `R²` = r2) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2))) |>
+  knitr::kable(caption = "Bayesian learning model parameters by party (fit to group means)")
+```
+
+```{r fig-bayesian-fit, fig.width=10, fig.height=5}
+#| fig-cap: "Bayesian learning model: observed vs. predicted allocation curves by party"
+
+pred_grid <- expand_grid(
+  round = seq(0.5, 8.5, by = 0.1),
+  party_lean = c("Democrat", "Independent", "Republican")
+) |>
+  left_join(bayes_party |> select(party_lean, m0, theta, tau), by = "party_lean") |>
+  mutate(predicted = theta + (m0 - theta) * tau / (tau + round))
+
+obs_party <- rounds |>
+  filter(!is.na(party_lean)) |>
+  group_by(party_lean, round) |>
+  summarize(
+    mean_pct_R = mean(pct_R, na.rm = TRUE),
+    se = sd(pct_R, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot() +
+  geom_ribbon(data = obs_party,
+              aes(x = round, ymin = mean_pct_R - 1.96 * se, ymax = mean_pct_R + 1.96 * se,
+                  fill = party_lean), alpha = 0.15) +
+  geom_point(data = obs_party, aes(x = round, y = mean_pct_R, color = party_lean), size = 3) +
+  geom_line(data = pred_grid, aes(x = round, y = predicted, color = party_lean),
+            linewidth = 1.2, linetype = "dashed") +
+  geom_hline(yintercept = 50, linetype = "dotted", color = "grey50") +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  scale_fill_manual(values = PARTY_LEAN_COLORS) +
+  scale_x_continuous(breaks = 1:8) +
+  scale_y_continuous(limits = c(25, 85)) +
+  labs(x = "Round", y = "% allocated to R-markets",
+       color = NULL, fill = NULL,
+       subtitle = "Points = observed means (± 95% CI); dashed lines = Bayesian learning model predictions")
+```
+
+```{r fig-prior-weight, fig.width=8, fig.height=4}
+#| fig-cap: "Decay of prior weight across rounds: how quickly do participants update?"
+
+weight_grid <- expand_grid(
+  round = seq(0, 8, by = 0.1),
+  party_lean = c("Democrat", "Independent", "Republican")
+) |>
+  left_join(bayes_party |> select(party_lean, tau), by = "party_lean") |>
+  mutate(prior_weight = tau / (tau + round))
+
+ggplot(weight_grid, aes(x = round, y = prior_weight * 100, color = party_lean)) +
+  geom_line(linewidth = 1.5) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  scale_x_continuous(breaks = 0:8) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = "Round", y = "Weight on prior belief (%)",
+       color = NULL,
+       subtitle = "Lower = more updated by game experience; 50% line = prior and data weighted equally")
+```
+
+```{r bayesian-interpretation}
+#| include: false
+dem_tau <- bayes_party |> filter(party_lean == "Democrat") |> pull(tau)
+rep_tau <- bayes_party |> filter(party_lean == "Republican") |> pull(tau)
+dem_m0 <- bayes_party |> filter(party_lean == "Democrat") |> pull(m0)
+rep_m0 <- bayes_party |> filter(party_lean == "Republican") |> pull(m0)
+dem_theta <- bayes_party |> filter(party_lean == "Democrat") |> pull(theta)
+rep_theta <- bayes_party |> filter(party_lean == "Republican") |> pull(theta)
+```
+
+The Bayesian learning model reveals three patterns:
+
+1. **Democrats carry stronger priors against R-markets.** Their estimated prior ($m_0$ = `r round(dem_m0, 1)`) is substantially lower than Republicans' ($m_0$ = `r round(rep_m0, 1)`), reflecting an initial belief that D-leaning markets are better targets for eco products.
+
+2. **Both groups converge to similar asymptotes.** Democrats converge to $\theta^*$ = `r round(dem_theta, 1)` and Republicans to $\theta^*$ = `r round(rep_theta, 1)` — the game teaches both groups that R-markets are undervalued, regardless of starting beliefs.
+
+3. **Learning speed ($\tau$) is comparable.** Democrats ($\tau$ = `r round(dem_tau, 2)`) and Republicans ($\tau$ = `r round(rep_tau, 2)`) update at similar rates, meaning the party difference in outcomes is driven by *where they start*, not *how fast they learn*.
+
+---
+
+# Partisanship: Different Starting Points, Same Destination
+
+## Revenue efficiency by party
+
+```{r compute-pct-optimal}
+# Compute per-version optimal single-round revenue from game parameters
+game_towns <- tibble(
+  town = c("harlan", "williamson", "burlington", "middlesex"),
+  rS = c(0.78, 0.72, 0.32, 0.28),
+  dS = c(0.22, 0.28, 0.68, 0.72),
+  mkt = c(50000, 75000, 45000, 65000),
+  comp = c(0.20, 0.35, 0.45, 0.85)
+)
+
+compute_optimal_rev <- function(K) {
+  alloc <- rep(0, 4)
+  for (i in 1:100) {
+    gains <- map_dbl(1:4, function(j) {
+      receptive <- game_towns$mkt[j] * (game_towns$rS[j] * 0.65 + game_towns$dS[j] * 0.75)
+      old_frac <- log1p(alloc[j] / 10000) / log1p(10)
+      new_frac <- log1p((alloc[j] + 1000) / 10000) / log1p(10)
+      (new_frac - old_frac) * receptive * exp(-K * game_towns$comp[j]) * 7
+    })
+    alloc[which.max(gains)] <- alloc[which.max(gains)] + 1000
+  }
+  sum(map_dbl(1:4, function(j) {
+    game_towns$mkt[j] * (game_towns$rS[j] * 0.65 + game_towns$dS[j] * 0.75) *
+      log1p(alloc[j] / 10000) / log1p(10) * exp(-K * game_towns$comp[j]) * 7
+  }))
+}
+
+opt_by_version <- tibble(
+  difficulty = factor(c("easy", "medium", "hard"), levels = c("easy", "medium", "hard")),
+  optimal_rev = map_dbl(c(1.5, 2, 2.5), compute_optimal_rev)
+)
+
+rounds <- rounds |>
+  left_join(opt_by_version, by = "difficulty") |>
+  mutate(pct_optimal_round = total_rev / optimal_rev * 100)
+```
+
+```{r fig-pct-optimal-party, fig.width=9, fig.height=5}
+#| fig-cap: "Revenue efficiency (% of version-specific optimal) by party across rounds"
+
+rounds |>
+  filter(!is.na(party_lean)) |>
+  ggplot(aes(x = round, y = pct_optimal_round, color = party_lean, fill = party_lean)) +
+  geom_smooth(method = "loess", span = 0.75, alpha = 0.15, linewidth = 1.5) +
+  geom_hline(yintercept = 100, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  scale_fill_manual(values = PARTY_LEAN_COLORS) +
+  scale_x_continuous(breaks = 1:8) +
+  labs(x = "Round", y = "% of optimal revenue",
+       color = NULL, fill = NULL)
+```
+
+## Allocation learning curves by party
+
+```{r fig-party-curves-pooled, fig.width=9, fig.height=4}
+#| fig-cap: "% allocated to R-leaning markets across rounds by party (pooled across versions)"
+
+rounds |>
+  filter(!is.na(party_lean)) |>
+  group_by(party_lean, round) |>
+  summarize(
+    mean_pct_R = mean(pct_R, na.rm = TRUE),
+    se = sd(pct_R, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = round, y = mean_pct_R, color = party_lean)) +
+  geom_ribbon(aes(ymin = mean_pct_R - 1.96 * se, ymax = mean_pct_R + 1.96 * se,
+                  fill = party_lean), alpha = 0.1, color = NA) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  scale_fill_manual(values = PARTY_LEAN_COLORS) +
+  scale_x_continuous(breaks = 1:8) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = "Round", y = "% to R-markets", color = NULL, fill = NULL)
+```
+
+## Market-level allocation by party
+
+```{r fig-market-by-party, fig.width=10, fig.height=7}
+#| fig-cap: "% of budget allocated to each market by party over 8 rounds"
+
+rounds |>
+  filter(!is.na(party_lean)) |>
+  select(id, party_lean, round, alloc_harlan, alloc_williamson, alloc_burlington, alloc_middlesex) |>
+  pivot_longer(cols = starts_with("alloc_"), names_prefix = "alloc_",
+               names_to = "market", values_to = "allocation") |>
+  mutate(pct_of_budget = allocation / 1000) |>  # $100k budget, so /1000 = %
+  group_by(party_lean, round, market) |>
+  summarize(mean_pct = mean(pct_of_budget, na.rm = TRUE),
+            se = sd(pct_of_budget, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") |>
+  mutate(market_label = MARKET_LABELS[market]) |>
+  ggplot(aes(x = round, y = mean_pct, color = party_lean)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.5) +
+  facet_wrap(~market_label) +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  scale_x_continuous(breaks = 1:8) +
+  labs(x = "Round", y = "% of budget", color = NULL)
+```
+
+## Mixed-effects model: learning rate × party
+
+```{r lmm-table}
+tidy(lmm, effects = "fixed") |>
+  mutate(
+    term = str_replace_all(term, "difficulty", "version_"),
+    term = str_replace_all(term, "version_medium", "Version B"),
+    term = str_replace_all(term, "version_hard", "Version C"),
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 3))) |>
+  knitr::kable(caption = "pct_R ~ round × party_lean + round × version + (1 + round | id)")
+```
+
+```{r lmm-anova-table}
+lmm_anova_df <- lmm_anova |>
+  as.data.frame() |>
+  mutate(across(where(is.numeric), \(x) round(x, 3)))
+rownames(lmm_anova_df) <- str_replace_all(rownames(lmm_anova_df), "difficulty", "version")
+
+lmm_anova_df |> knitr::kable(caption = "Type III ANOVA for mixed-effects learning model")
+```
+
+The mixed-effects model confirms: learning (round effect) is highly significant (*F* = `r round(lmm_anova["round_c", "F value"], 1)`, *p* < .001). Party affects starting allocation (Republicans start `r round(lmm_fe["party_leanRepublican"], 1)` pp higher, *p* = `r round(lmm_anova["party_lean", "Pr(>F)"], 3)`), but the round × party interaction is not significant (*p* = `r round(lmm_anova["round_c:party_lean", "Pr(>F)"], 2)`): all parties learn at the same rate.
+
+## Pre-post measures by party
+
+```{r party-alloc-tests}
+party_alloc <- d |>
+  filter(!is.na(party_lean)) |>
+  group_by(party_lean) |>
+  summarize(
+    n = n(),
+    mean_shift = mean(alloc_shift, na.rm = TRUE),
+    sd_shift = sd(alloc_shift, na.rm = TRUE),
+    t = t.test(alloc_shift)$statistic,
+    p = t.test(alloc_shift)$p.value,
+    d = mean(alloc_shift, na.rm = TRUE) / sd(alloc_shift, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 3)))
+
+party_alloc |> knitr::kable(caption = "Allocation shift by party lean")
+```
+
+```{r party-gap-tests}
+party_gap <- d |>
+  filter(!is.na(party_lean)) |>
+  group_by(party_lean) |>
+  summarize(
+    n = n(),
+    mean_gap_change = mean(gap_change, na.rm = TRUE),
+    t = t.test(gap_change)$statistic,
+    p = t.test(gap_change)$p.value,
+    d = mean(gap_change, na.rm = TRUE) / sd(gap_change, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 3)))
+
+party_gap |> knitr::kable(caption = "Belief gap change by party lean")
+```
+
+## Starting bias predicts learning
+
+```{r fig-pre-bias, fig.width=7, fig.height=4}
+#| fig-cap: "Participants who start more biased toward D-markets shift more"
+
+d |>
+  ggplot(aes(x = pre_pct_R, y = alloc_shift, color = party_lean)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = PARTY_LEAN_COLORS) +
+  labs(x = "Pre-game % to R-leaning areas",
+       y = "Allocation shift (pp)", color = NULL)
+```
+
+Pre-game R-allocation was negatively correlated with shift (*r* = `r round(bias_cor$estimate, 2)`, *p* `r ifelse(bias_cor$p.value < .001, "< .001", paste0("= ", round(bias_cor$p.value, 3)))`): participants who started furthest from optimal showed the largest corrections — exactly what the Bayesian model predicts.
+
+---
+
+# The "Difficulty" Manipulation Was Confounded
+
+The three game versions were intended to vary difficulty (noise level), but the implementation simultaneously changed three parameters:
+
+```{r version-params}
+tibble(
+  Version = c("A (easy)", "B (medium)", "C (hard)"),
+  `Half-max spend ($k)` = c(25, 30, 35),
+  `Competition steepness (K)` = c(1.5, 2.0, 2.5),
+  `Revenue noise (σ)` = c("20%", "30%", "35%"),
+) |> knitr::kable(caption = "Game parameters by version — three things change at once")
+```
+
+This is a problem. Higher $K$ penalizes high-competition D-markets disproportionately, making R-markets relatively *more* attractive in the "harder" versions:
+
+```{r signal-ratio}
+signal_ratio <- tibble(
+  Version = c("A (easy)", "B (medium)", "C (hard)"),
+  K = c(1.5, 2, 2.5),
+  `Harlan multiplier` = round(exp(-K * 0.20), 3),
+  `Middlesex multiplier` = round(exp(-K * 0.85), 3),
+) |>
+  mutate(`Harlan / Middlesex ratio` = round(`Harlan multiplier` / `Middlesex multiplier`, 1))
+
+signal_ratio |> knitr::kable(caption = "Revenue multiplier: R-market advantage grows with K")
+```
+
+In Version A, Harlan generates `r signal_ratio$"Harlan / Middlesex ratio"[1]`× the revenue per dollar vs. Middlesex. In Version C, this ratio grows to `r signal_ratio$"Harlan / Middlesex ratio"[3]`×. The "harder" version actually makes it *easier* to learn which markets are better — the amplified directional signal offsets the added noise.
+
+## Learning is equivalent across versions
+
+```{r fig-version-comparison, fig.width=10, fig.height=4}
+#| fig-cap: "% of optimal revenue (left) and allocation to R-markets (right) — equivalent across versions"
+
+# Compute per-version optimal revenue using the game's greedy algorithm parameters
+# Optimal is version-specific since K and halfMax differ
+p_opt <- d |>
+  group_by(version) |>
+  summarize(
+    mean_pct_optimal = mean(game_pct_optimal, na.rm = TRUE),
+    se = sd(game_pct_optimal, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = version, y = mean_pct_optimal, fill = version)) +
+  geom_col(alpha = 0.7, width = 0.6) +
+  geom_errorbar(aes(ymin = mean_pct_optimal - 1.96 * se,
+                    ymax = mean_pct_optimal + 1.96 * se), width = 0.2) +
+  scale_fill_manual(values = setNames(VERSION_COLORS, VERSION_LABELS), guide = "none") +
+  labs(x = NULL, y = "% of optimal revenue")
+
+p_learn <- rounds |>
+  group_by(version, round) |>
+  summarize(mean_pct_R = mean(pct_R, na.rm = TRUE),
+            se = sd(pct_R, na.rm = TRUE) / sqrt(n()), .groups = "drop") |>
+  ggplot(aes(x = round, y = mean_pct_R, color = version)) +
+  geom_ribbon(aes(ymin = mean_pct_R - 1.96 * se, ymax = mean_pct_R + 1.96 * se,
+                  fill = version), alpha = 0.1, color = NA) +
+  geom_line(linewidth = 1.2) + geom_point(size = 2) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = setNames(VERSION_COLORS, VERSION_LABELS)) +
+  scale_fill_manual(values = setNames(VERSION_COLORS, VERSION_LABELS)) +
+  scale_x_continuous(breaks = 1:8) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = "Round", y = "% to R-markets", color = NULL, fill = NULL)
+
+p_opt + p_learn
+```
+
+**Recommendation for the main study:** to create a clean difficulty manipulation, vary *only* the noise parameter ($\sigma$) while holding $K$ and half-max constant. This isolates signal-to-noise ratio as the sole dimension of difficulty, which is what the Bayesian learning model's $\tau$ parameter directly captures.
+
+---
+
+# Experience Measures
+
+```{r fig-experience, fig.width=10, fig.height=5}
+#| fig-cap: "Experience ratings by version (1 = Strongly disagree, 7 = Strongly agree)"
+
+exp_labels <- c(
+  exp_difficult = "Difficult",
+  exp_engaging = "Engaging",
+  exp_frustrated = "Frustrated",
+  exp_feedback_clear = "Feedback clear",
+  exp_learning = "Felt learning",
+  exp_too_long = "Too long"
+)
+
+d |>
+  select(id, version, all_of(names(exp_labels))) |>
+  pivot_longer(cols = all_of(names(exp_labels)), names_to = "item", values_to = "rating") |>
+  mutate(item_label = exp_labels[item],
+         item_label = factor(item_label, levels = exp_labels)) |>
+  ggplot(aes(x = item_label, y = rating, fill = version)) +
+  geom_boxplot(alpha = 0.7, width = 0.7, position = position_dodge(0.8)) +
+  scale_fill_manual(values = setNames(VERSION_COLORS, VERSION_LABELS)) +
+  scale_y_continuous(breaks = 1:7, limits = c(1, 7)) +
+  labs(x = NULL, y = "Rating (1-7)", fill = NULL) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+```{r scorecard}
+scorecard <- d |>
+  group_by(version) |>
+  summarize(
+    n = n(),
+    `Alloc shift (pp)` = mean(alloc_shift, na.rm = TRUE),
+    `Alloc shift d` = mean(alloc_shift, na.rm = TRUE) / sd(alloc_shift, na.rm = TRUE),
+    `% of optimal rev` = mean(game_pct_optimal, na.rm = TRUE),
+    Engaging = mean(exp_engaging, na.rm = TRUE),
+    Frustrated = mean(exp_frustrated, na.rm = TRUE),
+    `Felt learning` = mean(exp_learning, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+
+scorecard |> knitr::kable(caption = "Version calibration scorecard")
+```
+
+All three versions score comparably on engagement and felt learning. For the main experiment, any version works — the priority is fixing the confounded difficulty manipulation.
+
+---
+
+# Methods
+
+## Sample
+
+```{r sample-descriptives}
+sample_tab <- d |>
+  group_by(version) |>
+  summarize(
+    n = n(),
+    `Mean age` = mean(age, na.rm = TRUE),
+    `% Female` = 100 * mean(gender == "Female", na.rm = TRUE),
+    `Median duration (min)` = median(duration_min, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 1)))
+
+sample_tab |> knitr::kable(caption = "Sample by version")
+```
+
+We recruited `r nrow(d)` participants from Prolific, randomly assigned to Version A (n = `r sum(d$difficulty == "easy")`), B (n = `r sum(d$difficulty == "medium")`), or C (n = `r sum(d$difficulty == "hard")`).
+
+```{r sample-party}
+d |>
+  count(version, party) |>
+  pivot_wider(names_from = version, values_from = n, values_fill = 0) |>
+  knitr::kable(caption = "Party affiliation by version")
+```
+
+Collapsed: `r party_lean_n |> filter(party_lean == "Democrat") |> pull(n)` Democrats, `r party_lean_n |> filter(party_lean == "Independent") |> pull(n)` Independents, `r party_lean_n |> filter(party_lean == "Republican") |> pull(n)` Republicans.
+
+## Game design
+
+Participants played 8 rounds of a marketing allocation game. Each round, they distributed a $100,000 budget across four U.S. markets varying in partisan lean and competitive intensity. After each round, participants saw their revenue by market and cumulative earnings. The optimal strategy is to concentrate spending in R-leaning markets where low competition means higher returns per dollar — even though D-leaning markets have slightly higher eco-product receptivity (75% vs 65%).
+
+Three game versions varied noise level, competition penalty steepness ($K$), and half-max spending threshold simultaneously. As documented above, this confounded the intended difficulty manipulation: higher $K$ amplified the relative R-market signal, offsetting the added noise.
+
+## Measures
+
+- **Pre/post beliefs**: "What % of Democrats/Republicans would buy eco-friendly home products?" (0-100 slider)
+- **Pre/post allocation**: "If you had $100k to market eco-friendly products, what % would you spend in Republican-leaning areas?" (0-100 slider)
+- **Experience**: 6 items on a 7-point Likert scale (difficult, engaging, frustrated, feedback clear, felt learning, too long)
+- **Demographics**: Age, gender, party affiliation (5-point), education
+
+## Statistical approach
+
+1. **Pre-post effects**: Within-subject one-sample *t*-tests on allocation shift and belief gap change, with Cohen's *d* as effect size.
+2. **Learning curves**: Linear mixed-effects model with random intercepts and slopes per participant: `pct_R ~ round × party_lean + round × version + (1 + round | id)`.
+3. **Bayesian learning model**: Non-linear least squares fit of $\text{pct\_R}_t = \theta^* + (m_0 - \theta^*) \cdot \tau / (\tau + t)$ to group-level means by party, following the Normal-Normal updating framework (DeGroot, 1970; Erdem & Keane, 1996).

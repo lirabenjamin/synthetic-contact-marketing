@@ -1,0 +1,1142 @@
+---
+title: "T3 Experiment Pilot: Condition Comparison"
+subtitle: "Contact vs. Chat vs. Game — Pre-Post Changes by Condition"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 3
+    fig-cap-location: bottom
+    tbl-cap-location: top
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{=html}
+<style>
+  #version-controls {
+    position: sticky; top: 0; z-index: 1000;
+    background: white; border-bottom: 2px solid #ddd;
+    padding: 8px 16px; display: flex; flex-wrap: wrap;
+    gap: 8px; align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  }
+  .vc-label { font-weight: 600; color: #555; font-size: 0.85em;
+               text-transform: uppercase; letter-spacing: 0.03em; }
+  .vc-sep { color: #ccc; font-size: 1.2em; }
+  .ver-btn {
+    padding: 4px 12px; border: 2px solid #bbb; border-radius: 20px;
+    background: #f8f8f8; cursor: pointer; font-size: 0.85em;
+    font-weight: 500; transition: all 0.15s ease; color: #444;
+  }
+  .ver-btn:hover { border-color: #888; background: #eee; }
+  .ver-btn.active { background: #2166AC; color: white; border-color: #2166AC; }
+  .version-panel { display: none; }
+  .version-panel.active { display: block; }
+</style>
+
+<div id="version-controls">
+  <span class="vc-label">Contact:</span>
+  <button class="ver-btn" id="btn-sc-F" onclick="setOpt('sc','F',this)">Combined (Contact)</button>
+  <button class="ver-btn" id="btn-sc-T" onclick="setOpt('sc','T',this)">Split: RepBot vs DemBot</button>
+  <span class="vc-sep">|</span>
+  <span class="vc-label">Outlier:</span>
+  <button class="ver-btn" id="btn-ro-F" onclick="setOpt('ro','F',this)">Include All</button>
+  <button class="ver-btn" id="btn-ro-T" onclick="setOpt('ro','T',this)">Remove Warmth Outlier</button>
+</div>
+
+<script>
+  var _s = { sc: 'F', ro: 'F' };
+  function verKey() { return _s.sc + _s.ro; }
+  function updateDisplay() {
+    var v = verKey();
+    document.querySelectorAll('.version-panel').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.version === v);
+    });
+  }
+  function setOpt(axis, val, btn) {
+    _s[axis] = val;
+    var prefix = axis === 'sc' ? 'btn-sc-' : 'btn-ro-';
+    ['T','F'].forEach(function(v) {
+      var b = document.getElementById(prefix + v);
+      if (b) b.classList.toggle('active', v === val);
+    });
+    updateDisplay();
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('btn-sc-F').classList.add('active');
+    document.getElementById('btn-ro-F').classList.add('active');
+    updateDisplay();
+  });
+</script>
+```
+
+```{r setup, echo=FALSE}
+library(tidyverse)
+library(arrow)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(effectsize)
+library(rstatix)
+library(gt)
+library(patchwork)
+knitr::opts_chunk$set(dpi = 150)
+
+is_running_in_quarto <- function() Sys.getenv("QUARTO_DOCUMENT_PATH") != ""
+base_path <- if (is_running_in_quarto()) "../t3 experiment pilot/" else "./t3 experiment pilot/"
+fig_path  <- if (is_running_in_quarto()) "../output/figures/t3pilot-old/" else "./output/figures/t3pilot-old/"
+tab_path  <- if (is_running_in_quarto()) "../output/tables/t3pilot-old/"  else "./output/tables/t3pilot-old/"
+dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_path, recursive = TRUE, showWarnings = FALSE)
+
+# Party colors (secondary grouping)
+party_colors <- c("D→R" = "#2166AC", "R→D" = "#B2182B")
+
+game_warm_outlier_id <- "R_1QhUfoO3j0KddYt"
+
+pformat <- function(p, digits = 3) {
+  threshold <- 10^(-digits)
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+numformat <- function(x, digits = 2) sprintf(paste0("%.", digits, "f"), x)
+p_to_stars <- function(p) {
+  ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", "n.s.")))
+}
+```
+
+```{r driver, results='asis', echo=FALSE}
+# 4 versions: split_contact (F/T) × remove_warmth_outlier (F/T)
+# Always: full data, 3-condition (split_contact only meaningful in 3-cond)
+versions <- list(
+  FF = list(split_contact = FALSE, remove_warmth_outlier = FALSE),
+  FT = list(split_contact = FALSE, remove_warmth_outlier = TRUE),
+  TF = list(split_contact = TRUE,  remove_warmth_outlier = FALSE),
+  TT = list(split_contact = TRUE,  remove_warmth_outlier = TRUE)
+)
+
+for (ver_id in names(versions)) {
+  split_contact         <- versions[[ver_id]]$split_contact
+  remove_warmth_outlier <- versions[[ver_id]]$remove_warmth_outlier
+
+  # Always: full data, 3-condition base
+  dat <- read_parquet(paste0(base_path, "analysis_data.parquet"))
+
+  if (remove_warmth_outlier) {
+    dat <- dat %>% filter(ResponseId != game_warm_outlier_id)
+  }
+
+  if (split_contact) {
+    dat <- dat %>%
+      mutate(treatment = case_when(
+        treatment == "Contact" & participant_party == "Democrat"   ~ "RepBot",
+        treatment == "Contact" & participant_party == "Republican" ~ "DemBot",
+        TRUE ~ treatment
+      ))
+    condition_colors <- c(
+      "RepBot" = "#4DAF4A",
+      "DemBot" = "#984EA3",
+      "Chat"   = "#377EB8",
+      "Game"   = "#E41A1C"
+    )
+    treatment_levels <- c("RepBot", "DemBot", "Chat", "Game")
+  } else {
+    condition_colors <- c(
+      "Contact" = "#4DAF4A",
+      "Chat"    = "#377EB8",
+      "Game"    = "#E41A1C"
+    )
+    treatment_levels <- c("Contact", "Chat", "Game")
+  }
+
+  dat <- dat %>%
+    mutate(treatment = factor(treatment, levels = treatment_levels))
+
+  # pool_controls is always FALSE in this document
+  pool_controls <- FALSE
+
+  ver_fig_path <- paste0(fig_path, ver_id, "/")
+  dir.create(ver_fig_path, recursive = TRUE, showWarnings = FALSE)
+
+  cat(sprintf('\n<div class="version-panel" data-version="%s">\n\n', ver_id))
+
+  body_path <- paste0(base_path, "_body_old.qmd")
+  body_text <- readLines(body_path, warn = FALSE)
+  body_text <- gsub(
+    pattern     = "^```\\{r ([^,}]+)",
+    replacement = paste0("```{r ", ver_id, "-\\1"),
+    x           = body_text
+  )
+  knitr::opts_chunk$set(fig.path = paste0("code_old_files/figure-html/", ver_id, "-"))
+  child_out <- knitr::knit_child(text = paste(body_text, collapse = "\n"),
+                                 envir = environment(), quiet = TRUE)
+  cat(child_out)
+  knitr::opts_chunk$set(fig.path = "code_old_files/figure-html/")
+
+  cat('\n</div>\n\n')
+}
+```
+
+# Helper functions
+pformat <- function(p, digits = 3) {
+  threshold <- 10^(-digits)
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+
+numformat <- function(x, digits = 2) sprintf(paste0("%.", digits, "f"), x)
+
+p_to_stars <- function(p) {
+  ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", "n.s.")))
+}
+```
+
+## Sample
+
+```{r sample-stats}
+n_total <- nrow(dat)
+n_by_condition <- dat %>% count(treatment)
+n_contact <- n_by_condition %>% filter(treatment == "Contact") %>% pull(n)
+if (!pool_controls) {
+  n_chat <- n_by_condition %>% filter(treatment == "Chat") %>% pull(n)
+  n_game <- n_by_condition %>% filter(treatment == "Game") %>% pull(n)
+} else {
+  n_control <- n_by_condition %>% filter(treatment == "Control") %>% pull(n)
+}
+mean_age   <- mean(dat$age, na.rm = TRUE)
+pct_female <- mean(dat$gender == "Female", na.rm = TRUE) * 100
+```
+
+`r if (!pool_controls) paste0("We recruited ", n_total, " participants from Prolific: ", n_contact, " in the Contact condition, ", n_chat, " in the Chat condition, and ", n_game, " in the Game condition (mean age = ", numformat(mean_age), ", ", numformat(pct_female, 0), "% female).") else paste0("We recruited ", n_total, " participants from Prolific: ", n_contact, " in the Contact condition and ", n_control, " in the Control condition (Chat + Game pooled; mean age = ", numformat(mean_age), ", ", numformat(pct_female, 0), "% female).")`
+
+```{r sample-table}
+dat %>%
+  group_by(treatment) %>%
+  summarise(
+    N = n(),
+    `Democrats (D→R)` = sum(learner_party == "D→R"),
+    `Republicans (R→D)` = sum(learner_party == "R→D"),
+    `Mean Age` = mean(age, na.rm = TRUE) %>% numformat(),
+    `% Female` = (sum(gender == "Female", na.rm = TRUE) / n() * 100) %>% numformat(0),
+    `Extremism (M)` = mean(political_extremism, na.rm = TRUE) %>% numformat(),
+    .groups = "drop"
+  ) %>%
+  gt() %>%
+  tab_header(title = "Sample Composition by Condition")
+```
+
+### Condition balance check
+
+```{r condition-balance}
+# Check randomization: are conditions balanced on baseline measures?
+bal_acc  <- aov(accuracy_pre ~ treatment, data = dat)
+bal_warm <- aov(warmth_outgroup_pre ~ treatment, data = dat)
+bal_ext  <- aov(political_extremism ~ treatment, data = dat)
+
+bal_acc_p  <- summary(bal_acc)[[1]][["Pr(>F)"]][1]
+bal_warm_p <- summary(bal_warm)[[1]][["Pr(>F)"]][1]
+bal_ext_p  <- summary(bal_ext)[[1]][["Pr(>F)"]][1]
+```
+
+Conditions did not differ significantly on baseline accuracy (*F* `r pformat(bal_acc_p)`), baseline warmth (*F* `r pformat(bal_warm_p)`), or political extremism (*F* `r pformat(bal_ext_p)`), supporting successful randomization.
+
+### Differential engagement / cheating check
+
+```{r engagement-by-condition}
+# Survey phase: tab switches and hidden time (same for all conditions)
+eng_survey_aov_switch <- aov(tab_switch_count   ~ treatment, data = dat)
+eng_survey_aov_hidden <- aov(I(time_hidden_ms / 1000) ~ treatment, data = dat)
+eng_survey_switch_p <- summary(eng_survey_aov_switch)[[1]][["Pr(>F)"]][1]
+eng_survey_hidden_p <- summary(eng_survey_aov_hidden)[[1]][["Pr(>F)"]][1]
+
+# Intervention phase: tab switches and time in intervention window
+eng_bot_aov_switch <- aov(tab_switch_count_bot ~ treatment, data = dat)
+eng_bot_aov_hidden <- aov(I(time_hidden_ms_bot / 60000) ~ treatment, data = dat)
+eng_bot_switch_p <- summary(eng_bot_aov_switch)[[1]][["Pr(>F)"]][1]
+eng_bot_hidden_p <- summary(eng_bot_aov_hidden)[[1]][["Pr(>F)"]][1]
+
+# Pairwise for bot tab switches (the only marginally significant survey metric)
+eng_bot_switch_tukey <- dat %>% tukey_hsd(tab_switch_count_bot ~ treatment)
+if (!pool_controls) {
+  eng_bot_contact_game_p <- eng_bot_switch_tukey %>%
+    filter(group1 == "Contact", group2 == "Game") %>% pull(p.adj)
+} else {
+  eng_bot_contact_game_p <- eng_bot_switch_tukey %>%
+    filter(group1 == "Contact", group2 == "Control") %>% pull(p.adj)
+}
+
+# Summary table
+eng_summary <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    `Survey switches (M)` = mean(tab_switch_count, na.rm = TRUE),
+    `Survey hidden (sec, M)` = mean(time_hidden_ms / 1000, na.rm = TRUE),
+    `Intervention switches (M)` = mean(tab_switch_count_bot, na.rm = TRUE),
+    `Intervention time in window (min, M)` = mean(time_hidden_ms_bot / 60000, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r engagement-table}
+eng_summary %>%
+  mutate(across(where(is.double), ~ numformat(.x))) %>%
+  rename(Condition = treatment) %>%
+  gt() %>%
+  tab_header(title = "Engagement by Condition") %>%
+  tab_footnote(
+    "Survey phase: tab switches and hidden time during the questionnaire. Intervention phase: switches and time during the treatment window.",
+    locations = cells_title()
+  )
+```
+
+**Survey phase** (left the survey screen): conditions did not differ in tab switches (*F* `r pformat(eng_survey_switch_p)`) or hidden time (*F* `r pformat(eng_survey_hidden_p)`), ruling out differential cheating during measurement.
+
+**Intervention phase**: time spent in the intervention window differed across conditions (*F* `r pformat(eng_bot_hidden_p)`), but all conditions were fixed at 10 minutes, so differences in the hidden-time metric reflect how participants engaged within the window (e.g., Contact participants may have kept the chat window active more continuously), not differential exposure time. Intervention tab switches were marginally higher in Contact vs. `r if (!pool_controls) "Game" else "Control"` (*p* `r pformat(eng_bot_contact_game_p)`, Tukey-corrected), consistent with the chatbot task requiring active back-and-forth engagement. No evidence of differential cheating by condition.
+
+### Outlier and regression-to-mean check
+
+```{r outlier-check}
+dat <- dat %>%
+  mutate(
+    acc_change  = accuracy_post - accuracy_pre,
+    warm_change = warmth_outgroup_post - warmth_outgroup_pre
+  )
+
+# Within-condition z-scores
+dat <- dat %>%
+  group_by(treatment) %>%
+  mutate(
+    acc_z  = scale(acc_change)[, 1],
+    warm_z = scale(warm_change)[, 1]
+  ) %>%
+  ungroup()
+
+# Flag outliers (|z| > 2.5)
+outliers_acc  <- dat %>% filter(abs(acc_z)  > 2.5)
+outliers_warm <- dat %>% filter(abs(warm_z) > 2.5)
+
+# Regression-to-mean evidence: correlation of pre with change, by condition
+rtm_cors <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    r_pre_change = cor(accuracy_pre, acc_change, use = "complete.obs"),
+    pct_at_floor = mean(accuracy_pre <= -2) * 100,
+    .groups = "drop"
+  )
+
+# Key numbers for text
+contact_rtm_r  <- rtm_cors %>% filter(treatment == "Contact") %>% pull(r_pre_change)
+rtm_cors_text  <- rtm_cors %>%
+  mutate(s = paste0(treatment, ": *r* = ", numformat(r_pre_change))) %>%
+  pull(s) %>% paste(collapse = ", ")
+
+# Warm outlier (only relevant when pool_controls = FALSE and Game exists)
+game_warm_outlier_id <- "R_1QhUfoO3j0KddYt"
+if (!pool_controls) {
+  game_rtm_r     <- rtm_cors %>% filter(treatment == "Game")   %>% pull(r_pre_change)
+  chat_rtm_r     <- rtm_cors %>% filter(treatment == "Chat")   %>% pull(r_pre_change)
+  game_warm_with    <- mean(dat$warm_change[dat$treatment == "Game"], na.rm = TRUE)
+  game_warm_without <- mean(dat$warm_change[dat$treatment == "Game" &
+                              dat$ResponseId != game_warm_outlier_id], na.rm = TRUE)
+} else {
+  game_rtm_r <- chat_rtm_r <- NA_real_
+  game_warm_with <- game_warm_without <- NA_real_
+}
+```
+
+**Outliers.** `r nrow(outliers_acc)` participants had accuracy change scores more than 2.5 SD from their condition mean (`r outliers_acc %>% count(treatment) %>% mutate(s=paste0(treatment,": n=",n)) %>% pull(s) %>% paste(collapse=", ")`). `r nrow(outliers_warm)` participants had outlying warmth changes (`r outliers_warm %>% count(treatment) %>% mutate(s=paste0(treatment,": n=",n)) %>% pull(s) %>% paste(collapse=", ")``r if (!pool_controls) paste0(", including one Game participant with a warmth change of +100 points. Removing that participant reduces the Game warmth mean from ", numformat(game_warm_with), " to ", numformat(game_warm_without)) else ""`).
+
+**Baseline and change.** Within each condition, participants who started with the lowest accuracy tended to show the largest improvements (`r rtm_cors_text`). This is mechanically expected in any pre-post design: those furthest from the true value have more room to improve. Critically, this pattern is similar across all conditions, so it does not favor one condition over another. The condition comparison (the DiD contrast and ANCOVA below) correctly accounts for baseline by design, making it the appropriate test of whether conditions differ in their causal effect.
+
+```{r outlier-plot}
+#| fig-cap: "Accuracy change vs. baseline accuracy by condition. Strong negative slopes indicate regression to the mean: participants who started most inaccurate improved most, regardless of condition."
+#| fig-width: 9
+#| fig-height: 4
+
+ggplot(dat, aes(x = accuracy_pre, y = acc_change, color = treatment)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_point(alpha = 0.5, size = 2) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.15) +
+  scale_color_manual(values = condition_colors, name = "Condition") +
+  facet_wrap(~ treatment) +
+  labs(
+    x = "Baseline Accuracy (pre)",
+    y = "Accuracy Change (post − pre)",
+    title = "Regression to the Mean: Accuracy Change vs. Baseline by Condition"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+ggsave(paste0(fig_path, "rtm_check.png"), width = 9, height = 4, dpi = 300)
+```
+
+## Pre-Post Changes Overall
+
+Before examining condition differences, we verify that the pre-post design shows evidence of change across the full sample.
+
+```{r prepost-overall}
+# Accuracy
+acc_overall <- t.test(dat$accuracy_post, dat$accuracy_pre, paired = TRUE)
+acc_d_overall <- mean(dat$accuracy_post - dat$accuracy_pre) / sd(dat$accuracy_post - dat$accuracy_pre)
+
+# Warmth
+warm_overall <- t.test(dat$warmth_outgroup_post, dat$warmth_outgroup_pre, paired = TRUE)
+warm_d_overall <- mean(dat$warmth_outgroup_post - dat$warmth_outgroup_pre) / sd(dat$warmth_outgroup_post - dat$warmth_outgroup_pre)
+
+# Confidence
+conf_overall <- t.test(dat$confidence_outgroup_post, dat$confidence_outgroup_pre, paired = TRUE)
+conf_d_overall <- mean(dat$confidence_outgroup_post - dat$confidence_outgroup_pre) / sd(dat$confidence_outgroup_post - dat$confidence_outgroup_pre)
+```
+
+Across the full sample, accuracy improved (*t*(`r acc_overall$parameter`) = `r numformat(acc_overall$statistic)`, *p* `r pformat(acc_overall$p.value)`, *d* = `r numformat(acc_d_overall)`), outgroup warmth increased (*t*(`r warm_overall$parameter`) = `r numformat(warm_overall$statistic)`, *p* `r pformat(warm_overall$p.value)`, *d* = `r numformat(warm_d_overall)`), and confidence changed (*t*(`r conf_overall$parameter`) = `r numformat(conf_overall$statistic)`, *p* `r pformat(conf_overall$p.value)`, *d* = `r numformat(conf_d_overall)`).
+
+## Condition Differences (Main Analysis)
+
+The primary question is whether the Contact condition shows greater pre-post improvement than the two control conditions (Chat, Game) pooled together. We use a mixed-effects model with a `time × treatment` interaction, and test the key contrast: Contact Δ vs. average of Chat Δ and Game Δ.
+
+### Accuracy
+
+```{r accuracy-condition}
+accuracy_long <- dat %>%
+  select(ResponseId, treatment, learner_party, accuracy_pre, accuracy_post) %>%
+  pivot_longer(c(accuracy_pre, accuracy_post),
+               names_to = "time", names_pattern = "accuracy_(pre|post)",
+               values_to = "accuracy") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+# Model: time × treatment (reference = Contact)
+m_acc <- lmer(accuracy ~ time * treatment + (1 | ResponseId), data = accuracy_long)
+
+# Pre-post differences within each condition
+emm_acc_by_cond <- emmeans(m_acc, ~ time | treatment)
+acc_contrasts <- contrast(emm_acc_by_cond, "revpairwise", by = "treatment") %>%
+  as_tibble()  # positive = improvement (post - pre)
+
+# Full grid for DiD contrasts — adaptive to pool_controls toggle
+# Grid order (3-cond): pre×Contact, post×Contact, pre×Chat, post×Chat, pre×Game, post×Game
+# Grid order (pooled): pre×Contact, post×Contact, pre×Control, post×Control
+emm_acc_full <- emmeans(m_acc, ~ time * treatment)
+pull_did <- function(tbl, nm, col) tbl %>% filter(contrast == nm) %>% pull({{ col }})
+
+if (pool_controls) {
+  acc_did <- contrast(emm_acc_full, list(
+    `Contact vs. Control` = c(1, -1, -1, 1)   # Control Δ - Contact Δ ... sign: positive = Control > Contact
+  ))
+  # flip sign so positive = Contact improved more
+  acc_did_tbl <- acc_did %>% as_tibble() %>% mutate(estimate = -estimate)
+  acc_main_b  <- pull_did(acc_did_tbl, "Contact vs. Control", estimate)
+  acc_main_se <- pull_did(acc_did_tbl, "Contact vs. Control", SE)
+  acc_main_p  <- pull_did(acc_did_tbl, "Contact vs. Control", p.value)
+  acc_chat_vs_contact_b <- NA_real_; acc_chat_vs_contact_p <- NA_real_
+  acc_game_vs_contact_b <- NA_real_; acc_game_vs_contact_p <- NA_real_
+  acc_chat_vs_game_b    <- NA_real_; acc_chat_vs_game_p    <- NA_real_
+} else {
+  acc_did <- contrast(emm_acc_full, list(
+    `Contact vs. pooled controls` = c(-1,  1,  0.5, -0.5,  0.5, -0.5),
+    `Chat vs. Contact`            = c( 1, -1, -1,    1,    0,    0  ),
+    `Game vs. Contact`            = c( 1, -1,  0,    0,   -1,    1  ),
+    `Chat vs. Game`               = c( 0,  0, -1,    1,    1,   -1  )
+  ))
+  acc_did_tbl           <- acc_did %>% as_tibble()
+  acc_main_b            <- pull_did(acc_did_tbl, "Contact vs. pooled controls", estimate)
+  acc_main_se           <- pull_did(acc_did_tbl, "Contact vs. pooled controls", SE)
+  acc_main_p            <- pull_did(acc_did_tbl, "Contact vs. pooled controls", p.value)
+  acc_chat_vs_contact_b <- pull_did(acc_did_tbl, "Chat vs. Contact", estimate)
+  acc_chat_vs_contact_p <- pull_did(acc_did_tbl, "Chat vs. Contact", p.value)
+  acc_game_vs_contact_b <- pull_did(acc_did_tbl, "Game vs. Contact", estimate)
+  acc_game_vs_contact_p <- pull_did(acc_did_tbl, "Game vs. Contact", p.value)
+  acc_chat_vs_game_b    <- pull_did(acc_did_tbl, "Chat vs. Game",    estimate)
+  acc_chat_vs_game_p    <- pull_did(acc_did_tbl, "Chat vs. Game",    p.value)
+}
+```
+
+The time × treatment interaction tests whether conditions differed in accuracy improvement.
+
+```{r accuracy-condition-table}
+acc_contrasts %>%
+  select(Condition = treatment,
+         `Pre→Post Improvement` = estimate,
+         SE, df, `t-ratio` = t.ratio, `p-value` = p.value) %>%
+  mutate(
+    `Pre→Post Improvement` = numformat(`Pre→Post Improvement`),
+    SE = numformat(SE),
+    df = numformat(df, 0),
+    `t-ratio` = numformat(`t-ratio`),
+    `p-value` = map_chr(`p-value`, pformat)
+  ) %>%
+  gt() %>%
+  tab_header(title = "Accuracy: Pre-Post Improvement by Condition") %>%
+  tab_footnote("Positive = improvement. Estimated from mixed-effects model (Contact as reference).",
+               locations = cells_title())
+```
+
+**Primary test:** Contact vs. `r if (!pool_controls) "pooled controls" else "Control"`: *b* = `r numformat(acc_main_b)`, SE = `r numformat(acc_main_se)`, *p* `r pformat(acc_main_p)`. `r if (!pool_controls) paste0("**Pairwise:** Chat vs. Contact (*b* = ", numformat(acc_chat_vs_contact_b), ", *p* ", pformat(acc_chat_vs_contact_p), "); Game vs. Contact (*b* = ", numformat(acc_game_vs_contact_b), ", *p* ", pformat(acc_game_vs_contact_p), "); Chat vs. Game (*b* = ", numformat(acc_chat_vs_game_b), ", *p* ", pformat(acc_chat_vs_game_p), ").")`
+
+### Model choice: lmer vs. ANCOVA
+
+```{r model-choice-diagnostics}
+# Pre-post correlation by condition (drives the key tradeoff between lmer and ANCOVA)
+prepost_cors <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    r_prepost = cor(accuracy_pre, accuracy_post, use = "complete.obs"),
+    .groups = "drop"
+  )
+
+# ANCOVA: regress post on pre + treatment
+ancova_acc <- lm(accuracy_post ~ accuracy_pre + treatment, data = dat)
+ancova_pre_coef <- coef(ancova_acc)["accuracy_pre"]
+ancova_pre_se   <- summary(ancova_acc)$coefficients["accuracy_pre", "Std. Error"]
+ancova_pre_p    <- summary(ancova_acc)$coefficients["accuracy_pre", "Pr(>|t|)"]
+
+# Test homogeneity of regression slopes (pre × condition interaction)
+ancova_hom   <- lm(accuracy_post ~ accuracy_pre * treatment, data = dat)
+ancova_hom_p <- anova(ancova_acc, ancova_hom)$`Pr(>F)`[2]
+
+if (!pool_controls) {
+  ancova_game_b <- coef(ancova_acc)["treatmentGame"]
+  ancova_chat_b <- coef(ancova_acc)["treatmentChat"]
+  ancova_game_p <- summary(ancova_acc)$coefficients["treatmentGame", "Pr(>|t|)"]
+  ancova_chat_p <- summary(ancova_acc)$coefficients["treatmentChat", "Pr(>|t|)"]
+} else {
+  ancova_game_b <- NA_real_; ancova_chat_b <- NA_real_
+  ancova_game_p <- NA_real_; ancova_chat_p <- NA_real_
+}
+```
+
+For a **randomized pre-post design**, both `lmer(accuracy ~ time * treatment + (1|id))` and `lm(accuracy_post ~ accuracy_pre + treatment)` (ANCOVA) are valid, but they make different assumptions. **ANCOVA** is generally preferred in randomized experiments [@vickers2001analysing]. It regresses the post-score on the pre-score as a covariate, removing pre-score variance from the residuals and increasing statistical power. In our data, the pre-score coefficient is *b* = `r numformat(ancova_pre_coef)` (*SE* = `r numformat(ancova_pre_se)`, *p* `r pformat(ancova_pre_p)`): substantially less than 1.0, which means there is regression to the mean and ANCOVA extracts more power than a change-score approach.
+
+**lmer** (`lmer(y ~ time * treatment + (1|id))`) models both time points jointly with a random intercept per participant. The random intercept implicitly assumes the pre-score coefficient equals 1, equivalent to an ANCOVA with *b* = 1 for `pre`. When the true pre-post correlation is well below 1 — here `r prepost_cors %>% mutate(s = paste0("*r* = ", numformat(r_prepost), " (", treatment, ")")) %>% pull(s) %>% paste(collapse = ", ")` — the lmer model leaves avoidable residual variance on the table.
+
+**Homogeneity of slopes:** ANCOVA requires the pre → post regression slope to be the same in all conditions. The `pre × treatment` interaction test gives *p* `r pformat(ancova_hom_p)`. `r if(ancova_hom_p > .05) "This assumption is not violated, supporting ANCOVA as the primary model." else "This assumption is borderline violated; lmer is more robust in this case."`
+
+**Both models agree:** conditions do not differ significantly in accuracy improvement. For the pre-registered full study, we will use **ANCOVA** as the primary specification and lmer as a robustness check.
+
+```{r model-comparison-table}
+# Build a side-by-side comparison table: lmer DiD vs ANCOVA
+ancova_se_mat <- summary(ancova_acc)$coefficients
+
+if (pool_controls) {
+  # Only one contrast available: Contact vs. Control
+  ancova_ctrl_b  <- coef(ancova_acc)["treatmentControl"]
+  ancova_ctrl_se <- ancova_se_mat["treatmentControl", "Std. Error"]
+  ancova_ctrl_p  <- ancova_se_mat["treatmentControl", "Pr(>|t|)"]
+  model_compare <- tribble(
+    ~Contrast,              ~`lmer b`, ~`lmer SE`, ~`lmer p`,
+                             ~`ANCOVA b`, ~`ANCOVA SE`, ~`ANCOVA p`,
+    "Contact vs. Control",
+      acc_main_b,
+      pull_did(acc_did_tbl, "Contact vs. Control", SE),
+      acc_main_p,
+      -ancova_ctrl_b,        # flip sign: positive = Contact improved more
+      ancova_ctrl_se,
+      ancova_ctrl_p
+  )
+} else {
+  model_compare <- tribble(
+    ~Contrast,                    ~`lmer b`, ~`lmer SE`, ~`lmer p`,
+                                   ~`ANCOVA b`, ~`ANCOVA SE`, ~`ANCOVA p`,
+    "Contact vs. pooled controls",
+      acc_main_b,
+      pull_did(acc_did_tbl, "Contact vs. pooled controls", SE),
+      acc_main_p,
+      -(0.5 * ancova_chat_b + 0.5 * ancova_game_b),
+      NA_real_, NA_real_,
+    "Chat vs. Contact",
+      acc_chat_vs_contact_b,
+      pull_did(acc_did_tbl, "Chat vs. Contact", SE),
+      acc_chat_vs_contact_p,
+      ancova_chat_b,
+      ancova_se_mat["treatmentChat", "Std. Error"],
+      ancova_chat_p,
+    "Game vs. Contact",
+      acc_game_vs_contact_b,
+      pull_did(acc_did_tbl, "Game vs. Contact", SE),
+      acc_game_vs_contact_p,
+      ancova_game_b,
+      ancova_se_mat["treatmentGame", "Std. Error"],
+      ancova_game_p,
+    "Chat vs. Game",
+      acc_chat_vs_game_b,
+      pull_did(acc_did_tbl, "Chat vs. Game", SE),
+      acc_chat_vs_game_p,
+      ancova_chat_b - ancova_game_b,
+      NA_real_, NA_real_
+  )
+}
+
+model_compare %>%
+  mutate(across(c(`lmer b`, `lmer SE`, `ANCOVA b`, `ANCOVA SE`),
+                ~ ifelse(is.na(.x), "—", numformat(.x))),
+         `lmer p`   = map_chr(`lmer p`,   ~ ifelse(is.na(.x), "—", pformat(.x))),
+         `ANCOVA p` = map_chr(`ANCOVA p`, ~ ifelse(is.na(.x), "—", pformat(.x)))) %>%
+  gt() %>%
+  tab_header(title = "lmer vs. ANCOVA: Accuracy Condition Comparisons") %>%
+  tab_spanner(label = "lmer (DiD contrast)", columns = c(`lmer b`, `lmer SE`, `lmer p`)) %>%
+  tab_spanner(label = "ANCOVA (lm post ~ pre + condition)", columns = c(`ANCOVA b`, `ANCOVA SE`, `ANCOVA p`)) %>%
+  tab_footnote("lmer estimates from emmeans DiD contrasts on the full time × treatment grid. ANCOVA estimates are regression coefficients (contact = reference). Contact vs. pooled ANCOVA SE omitted (non-standard linear combination).",
+               locations = cells_title())
+```
+
+```{r accuracy-condition-plot}
+#| fig-cap: "Accuracy (negative absolute error) by condition and time. Points show estimated marginal means ± SE from the mixed-effects model."
+#| fig-width: 8
+#| fig-height: 5
+
+emm_acc_tbl <- as_tibble(emm_acc_by_cond) %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+p_acc <- ggplot(emm_acc_tbl,
+                aes(x = time, y = emmean, group = treatment, color = treatment)) +
+  geom_line(linewidth = 1.4) +
+  geom_pointrange(aes(ymin = emmean - SE, ymax = emmean + SE), size = 0.6, linewidth = 0.8) +
+  # Significance stars per condition (spaced by row index)
+  geom_text(data = acc_contrasts %>%
+              mutate(
+                x = 1.5,
+                y = max(emm_acc_tbl$emmean) + 0.5,
+                label = p_to_stars(p.value),
+                y_offset = (row_number() - 1) * -0.5
+              ),
+            aes(x = x, y = y + y_offset, label = label, color = treatment),
+            size = 4, fontface = "bold", show.legend = FALSE, inherit.aes = FALSE) +
+  scale_color_manual(values = condition_colors, name = "Condition") +
+  scale_x_discrete(labels = c("Pre", "Post"), expand = expansion(add = 0.3)) +
+  labs(y = "Accuracy (neg. abs. error)", x = NULL, title = "Accuracy by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_acc
+ggsave(paste0(fig_path, "accuracy_by_condition.png"), p_acc, width = 8, height = 5, dpi = 300)
+```
+
+### Warmth
+
+```{r warmth-condition}
+warmth_long <- dat %>%
+  select(ResponseId, treatment, learner_party, warmth_outgroup_pre, warmth_outgroup_post) %>%
+  pivot_longer(c(warmth_outgroup_pre, warmth_outgroup_post),
+               names_to = "time", names_pattern = "warmth_outgroup_(pre|post)",
+               values_to = "warmth") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+m_warm <- lmer(warmth ~ time * treatment + (1 | ResponseId), data = warmth_long)
+
+emm_warm_by_cond <- emmeans(m_warm, ~ time | treatment)
+warm_contrasts <- contrast(emm_warm_by_cond, "revpairwise", by = "treatment") %>%
+  as_tibble()
+
+emm_warm_full <- emmeans(m_warm, ~ time * treatment)
+
+if (pool_controls) {
+  warm_did <- contrast(emm_warm_full, list(
+    `Contact vs. Control` = c(1, -1, -1, 1)
+  ))
+  warm_did_tbl <- warm_did %>% as_tibble() %>% mutate(estimate = -estimate)
+  warm_main_b  <- pull_did(warm_did_tbl, "Contact vs. Control", estimate)
+  warm_main_se <- pull_did(warm_did_tbl, "Contact vs. Control", SE)
+  warm_main_p  <- pull_did(warm_did_tbl, "Contact vs. Control", p.value)
+  warm_chat_vs_contact_b <- NA_real_; warm_chat_vs_contact_p <- NA_real_
+  warm_game_vs_contact_b <- NA_real_; warm_game_vs_contact_p <- NA_real_
+  warm_chat_vs_game_b    <- NA_real_; warm_chat_vs_game_p    <- NA_real_
+} else {
+  warm_did <- contrast(emm_warm_full, list(
+    `Contact vs. pooled controls` = c(-1,  1,  0.5, -0.5,  0.5, -0.5),
+    `Chat vs. Contact`            = c( 1, -1, -1,    1,    0,    0  ),
+    `Game vs. Contact`            = c( 1, -1,  0,    0,   -1,    1  ),
+    `Chat vs. Game`               = c( 0,  0, -1,    1,    1,   -1  )
+  ))
+  warm_did_tbl           <- warm_did %>% as_tibble()
+  warm_main_b            <- pull_did(warm_did_tbl, "Contact vs. pooled controls", estimate)
+  warm_main_se           <- pull_did(warm_did_tbl, "Contact vs. pooled controls", SE)
+  warm_main_p            <- pull_did(warm_did_tbl, "Contact vs. pooled controls", p.value)
+  warm_chat_vs_contact_b <- pull_did(warm_did_tbl, "Chat vs. Contact", estimate)
+  warm_chat_vs_contact_p <- pull_did(warm_did_tbl, "Chat vs. Contact", p.value)
+  warm_game_vs_contact_b <- pull_did(warm_did_tbl, "Game vs. Contact", estimate)
+  warm_game_vs_contact_p <- pull_did(warm_did_tbl, "Game vs. Contact", p.value)
+  warm_chat_vs_game_b    <- pull_did(warm_did_tbl, "Chat vs. Game",    estimate)
+  warm_chat_vs_game_p    <- pull_did(warm_did_tbl, "Chat vs. Game",    p.value)
+}
+```
+
+```{r warmth-condition-table}
+warm_contrasts %>%
+  select(Condition = treatment,
+         `Pre→Post Improvement` = estimate,
+         SE, df, `t-ratio` = t.ratio, `p-value` = p.value) %>%
+  mutate(
+    `Pre→Post Improvement` = numformat(`Pre→Post Improvement`),
+    SE = numformat(SE),
+    df = numformat(df, 0),
+    `t-ratio` = numformat(`t-ratio`),
+    `p-value` = map_chr(`p-value`, pformat)
+  ) %>%
+  gt() %>%
+  tab_header(title = "Warmth: Pre-Post Improvement by Condition") %>%
+  tab_footnote("Positive = increase in outgroup warmth. Estimated from mixed-effects model.",
+               locations = cells_title())
+```
+
+**Primary test:** Contact vs. `r if (!pool_controls) "pooled controls" else "Control"`: *b* = `r numformat(warm_main_b)`, SE = `r numformat(warm_main_se)`, *p* `r pformat(warm_main_p)`. `r if (!pool_controls) paste0("**Pairwise:** Chat vs. Contact (*b* = ", numformat(warm_chat_vs_contact_b), ", *p* ", pformat(warm_chat_vs_contact_p), "); Game vs. Contact (*b* = ", numformat(warm_game_vs_contact_b), ", *p* ", pformat(warm_game_vs_contact_p), "); Chat vs. Game (*b* = ", numformat(warm_chat_vs_game_b), ", *p* ", pformat(warm_chat_vs_game_p), ").")`
+
+```{r warmth-condition-plot}
+#| fig-cap: "Outgroup warmth (0-100) by condition and time. Points show estimated marginal means ± SE."
+#| fig-width: 8
+#| fig-height: 5
+
+emm_warm_tbl <- as_tibble(emm_warm_by_cond) %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+p_warm <- ggplot(emm_warm_tbl,
+                 aes(x = time, y = emmean, group = treatment, color = treatment)) +
+  geom_line(linewidth = 1.4) +
+  geom_pointrange(aes(ymin = emmean - SE, ymax = emmean + SE), size = 0.6, linewidth = 0.8) +
+  scale_color_manual(values = condition_colors, name = "Condition") +
+  scale_x_discrete(labels = c("Pre", "Post"), expand = expansion(add = 0.3)) +
+  labs(y = "Outgroup Warmth (0-100)", x = NULL, title = "Warmth by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_warm
+ggsave(paste0(fig_path, "warmth_by_condition.png"), p_warm, width = 8, height = 5, dpi = 300)
+```
+
+### Confidence
+
+```{r confidence-condition}
+confidence_long <- dat %>%
+  select(ResponseId, treatment, learner_party, confidence_outgroup_pre, confidence_outgroup_post) %>%
+  pivot_longer(c(confidence_outgroup_pre, confidence_outgroup_post),
+               names_to = "time", names_pattern = "confidence_outgroup_(pre|post)",
+               values_to = "confidence") %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+m_conf <- lmer(confidence ~ time * treatment + (1 | ResponseId), data = confidence_long)
+
+emm_conf_by_cond <- emmeans(m_conf, ~ time | treatment)
+conf_contrasts <- contrast(emm_conf_by_cond, "revpairwise", by = "treatment") %>%
+  as_tibble()
+
+emm_conf_full <- emmeans(m_conf, ~ time * treatment)
+
+if (pool_controls) {
+  conf_did <- contrast(emm_conf_full, list(
+    `Contact vs. Control` = c(1, -1, -1, 1)
+  ))
+  conf_did_tbl <- conf_did %>% as_tibble() %>% mutate(estimate = -estimate)
+  conf_main_b  <- pull_did(conf_did_tbl, "Contact vs. Control", estimate)
+  conf_main_se <- pull_did(conf_did_tbl, "Contact vs. Control", SE)
+  conf_main_p  <- pull_did(conf_did_tbl, "Contact vs. Control", p.value)
+  conf_chat_vs_contact_b <- NA_real_; conf_chat_vs_contact_p <- NA_real_
+  conf_game_vs_contact_b <- NA_real_; conf_game_vs_contact_p <- NA_real_
+  conf_chat_vs_game_b    <- NA_real_; conf_chat_vs_game_p    <- NA_real_
+} else {
+  conf_did <- contrast(emm_conf_full, list(
+    `Contact vs. pooled controls` = c(-1,  1,  0.5, -0.5,  0.5, -0.5),
+    `Chat vs. Contact`            = c( 1, -1, -1,    1,    0,    0  ),
+    `Game vs. Contact`            = c( 1, -1,  0,    0,   -1,    1  ),
+    `Chat vs. Game`               = c( 0,  0, -1,    1,    1,   -1  )
+  ))
+  conf_did_tbl           <- conf_did %>% as_tibble()
+  conf_main_b            <- pull_did(conf_did_tbl, "Contact vs. pooled controls", estimate)
+  conf_main_se           <- pull_did(conf_did_tbl, "Contact vs. pooled controls", SE)
+  conf_main_p            <- pull_did(conf_did_tbl, "Contact vs. pooled controls", p.value)
+  conf_chat_vs_contact_b <- pull_did(conf_did_tbl, "Chat vs. Contact", estimate)
+  conf_chat_vs_contact_p <- pull_did(conf_did_tbl, "Chat vs. Contact", p.value)
+  conf_game_vs_contact_b <- pull_did(conf_did_tbl, "Game vs. Contact", estimate)
+  conf_game_vs_contact_p <- pull_did(conf_did_tbl, "Game vs. Contact", p.value)
+  conf_chat_vs_game_b    <- pull_did(conf_did_tbl, "Chat vs. Game",    estimate)
+  conf_chat_vs_game_p    <- pull_did(conf_did_tbl, "Chat vs. Game",    p.value)
+}
+```
+
+```{r confidence-condition-table}
+conf_contrasts %>%
+  select(Condition = treatment,
+         `Pre→Post Change` = estimate,
+         SE, df, `t-ratio` = t.ratio, `p-value` = p.value) %>%
+  mutate(
+    `Pre→Post Change` = numformat(`Pre→Post Change`),
+    SE = numformat(SE),
+    df = numformat(df, 0),
+    `t-ratio` = numformat(`t-ratio`),
+    `p-value` = map_chr(`p-value`, pformat)
+  ) %>%
+  gt() %>%
+  tab_header(title = "Confidence: Pre-Post Change by Condition") %>%
+  tab_footnote("Positive = increase in confidence. Estimated from mixed-effects model.",
+               locations = cells_title())
+```
+
+**Primary test:** Contact vs. `r if (!pool_controls) "pooled controls" else "Control"`: *b* = `r numformat(conf_main_b)`, SE = `r numformat(conf_main_se)`, *p* `r pformat(conf_main_p)`. `r if (!pool_controls) paste0("**Pairwise:** Chat vs. Contact (*b* = ", numformat(conf_chat_vs_contact_b), ", *p* ", pformat(conf_chat_vs_contact_p), "); Game vs. Contact (*b* = ", numformat(conf_game_vs_contact_b), ", *p* ", pformat(conf_game_vs_contact_p), "); Chat vs. Game (*b* = ", numformat(conf_chat_vs_game_b), ", *p* ", pformat(conf_chat_vs_game_p), ").")`
+
+## Behavioral Outcomes by Condition
+
+### Dictator Game Donation
+
+```{r donation-condition}
+dat <- dat %>% mutate(donated_any = as.integer(donation > 0))
+
+don_by_condition <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    N          = n(),
+    M          = mean(donation, na.rm = TRUE),
+    SD         = sd(donation, na.rm = TRUE),
+    SE         = SD / sqrt(N),
+    pct_donated = mean(donated_any) * 100,
+    mean_pos   = mean(donation[donation > 0], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Continuous donation: overall ANOVA + Tukey pairwise
+don_aov <- aov(donation ~ treatment, data = dat)
+don_aov_p <- summary(don_aov)[[1]][["Pr(>F)"]][1]
+don_aov_f <- summary(don_aov)[[1]][["F value"]][1]
+don_pairwise <- dat %>% tukey_hsd(donation ~ treatment)
+
+extract_tukey <- function(tbl, g1, g2) {
+  tbl %>% filter(group1 == g1, group2 == g2)
+}
+
+# Stage 1 (any donation): overall ANOVA + Tukey pairwise
+don_aov_bin <- aov(donated_any ~ treatment, data = dat)
+don_aov_bin_p <- summary(don_aov_bin)[[1]][["Pr(>F)"]][1]
+don_aov_bin_f <- summary(don_aov_bin)[[1]][["F value"]][1]
+don_pairwise_bin <- dat %>% tukey_hsd(donated_any ~ treatment)
+
+# Stage 2 (amount among donors): ANOVA
+dat_donors <- dat %>% filter(donated_any == 1)
+don_aov_pos <- aov(donation ~ treatment, data = dat_donors)
+don_aov_pos_p <- summary(don_aov_pos)[[1]][["Pr(>F)"]][1]
+don_aov_pos_f <- summary(don_aov_pos)[[1]][["F value"]][1]
+
+# Condition-specific pairwise (only meaningful when 3 conditions)
+if (!pool_controls) {
+  don_cont_chat_game     <- extract_tukey(don_pairwise,     "Chat", "Game")
+  don_bin_contact_chat_p <- extract_tukey(don_pairwise_bin, "Contact", "Chat")$p.adj
+  don_bin_contact_game_p <- extract_tukey(don_pairwise_bin, "Contact", "Game")$p.adj
+  don_bin_chat_game_p    <- extract_tukey(don_pairwise_bin, "Chat",    "Game")$p.adj
+} else {
+  don_cont_chat_game     <- tibble(p.adj = NA_real_)
+  don_bin_contact_chat_p <- NA_real_
+  don_bin_contact_game_p <- extract_tukey(don_pairwise_bin, "Contact", "Control")$p.adj
+  don_bin_chat_game_p    <- NA_real_
+}
+```
+
+**Continuous donation:** Conditions differed in donation amount (*F* = `r numformat(don_aov_f)`, *p* `r pformat(don_aov_p)`). `r if (!pool_controls) paste0("Tukey follow-ups show that Chat donated more than Game (*p* ", pformat(don_cont_chat_game$p.adj), "); neither Contact vs. Chat nor Contact vs. Game reached significance (see table below).")`
+
+Given that roughly half the sample donated nothing, we decompose into two stages. **Stage 1 (any donation):** conditions differed in whether participants donated at all (*F* = `r numformat(don_aov_bin_f)`, *p* `r pformat(don_aov_bin_p)`)`r if (!pool_controls) paste0(", driven by **Chat vs. Game** (Tukey *p* ", pformat(don_bin_chat_game_p), "; Chat: ", don_by_condition %>% filter(treatment=='Chat') %>% pull(pct_donated) %>% numformat(0), "% donated, Game: ", don_by_condition %>% filter(treatment=='Game') %>% pull(pct_donated) %>% numformat(0), "%, Contact: ", don_by_condition %>% filter(treatment=='Contact') %>% pull(pct_donated) %>% numformat(0), "%). Contact vs. Chat (*p* ", pformat(don_bin_contact_chat_p), ") and Contact vs. Game (*p* ", pformat(don_bin_contact_game_p), ") were not significant") else paste0("; Contact vs. Control: *p* ", pformat(don_bin_contact_game_p))`. **Stage 2 (amount among donors):** among those who donated, conditions did not differ in how much they gave (*F* = `r numformat(don_aov_pos_f)`, *p* `r pformat(don_aov_pos_p)`).
+
+```{r donation-condition-table}
+don_by_condition %>%
+  mutate(across(c(M, SD, SE, mean_pos), numformat),
+         pct_donated = numformat(pct_donated, 0)) %>%
+  select(Condition = treatment, N,
+         `% Donated` = pct_donated,
+         `Mean (all)` = M, SD,
+         `Mean (donors only)` = mean_pos) %>%
+  gt() %>%
+  tab_header(title = "Dictator Game: Donation by Condition") %>%
+  tab_footnote("% Donated = proportion who gave any amount > 0. Mean (donors only) excludes zeros.",
+               locations = cells_title())
+```
+
+```{r donation-pairwise-table}
+bind_rows(
+  don_pairwise %>% select(group1, group2, estimate, p.adj) %>% mutate(DV = "Continuous (0-50¢)"),
+  don_pairwise_bin %>% select(group1, group2, estimate, p.adj) %>% mutate(DV = "Any donation (0/1)")
+) %>%
+  mutate(
+    Comparison = paste0(group1, " vs. ", group2),
+    estimate = numformat(estimate),
+    p.adj = map_chr(p.adj, pformat)
+  ) %>%
+  select(DV, Comparison, `Difference` = estimate, `p (Tukey)` = p.adj) %>%
+  gt() %>%
+  tab_header(title = "Pairwise Tukey Comparisons: Donation") %>%
+  tab_footnote("Tukey-corrected p-values.", locations = cells_title())
+```
+
+```{r donation-condition-plot}
+#| fig-cap: "Left: Dictator game donation (0-50 cents) by condition — individual points, mean ± SE. Right: Proportion donating any amount."
+#| fig-width: 10
+#| fig-height: 5
+
+p_don_cont <- ggplot(dat, aes(x = treatment, y = donation, color = treatment)) +
+  geom_jitter(width = 0.15, alpha = 0.35, size = 2) +
+  geom_pointrange(data = don_by_condition,
+                  aes(x = treatment, y = M, ymin = M - SE, ymax = M + SE),
+                  size = 0.8, linewidth = 1.2, inherit.aes = FALSE,
+                  color = condition_colors[as.character(don_by_condition$treatment)]) +
+  geom_text(data = don_by_condition,
+            aes(x = treatment, y = M, label = numformat(M)),
+            nudge_x = 0.3, size = 3.2, show.legend = FALSE,
+            color = condition_colors[as.character(don_by_condition$treatment)]) +
+  scale_color_manual(values = condition_colors) +
+  labs(y = "Donation (cents)", x = NULL, title = "A. Continuous Amount") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+# % donated panel with 95% CI
+don_bin_ci <- don_by_condition %>%
+  mutate(
+    n_donated = round(pct_donated / 100 * N),
+    ci_lo = map2_dbl(n_donated, N, ~ binom.test(.x, .y)$conf.int[1] * 100),
+    ci_hi = map2_dbl(n_donated, N, ~ binom.test(.x, .y)$conf.int[2] * 100)
+  )
+
+p_don_bin <- ggplot(don_bin_ci, aes(x = treatment, y = pct_donated, color = treatment)) +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.8, linewidth = 1.2) +
+  geom_text(aes(y = ci_hi + 4, label = paste0(round(pct_donated), "%")),
+            size = 3.2, show.legend = FALSE) +
+  scale_color_manual(values = condition_colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25)) +
+  labs(y = "% Donating Any Amount", x = NULL, title = "B. Any Donation") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+p_don <- p_don_cont + p_don_bin
+p_don
+ggsave(paste0(fig_path, "donation_by_condition.png"), p_don, width = 10, height = 5, dpi = 300)
+```
+
+### Talk Partner Preference
+
+```{r talk-partner-condition}
+dat <- dat %>%
+  mutate(
+    chose_outgroup = case_when(
+      participant_party == "Democrat"   & talk_partner == "I'd rather talk with a republican" ~ 1,
+      participant_party == "Republican" & talk_partner == "I'd rather talk with a democrat"   ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+talk_by_condition <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    n_total      = n(),
+    n_outgroup   = sum(chose_outgroup, na.rm = TRUE),
+    pct_outgroup = n_outgroup / n_total * 100,
+    ci_lo = binom.test(n_outgroup, n_total)$conf.int[1] * 100,
+    ci_hi = binom.test(n_outgroup, n_total)$conf.int[2] * 100,
+    .groups = "drop"
+  )
+
+# Overall chi-square
+talk_tab <- table(dat$treatment, dat$chose_outgroup)
+talk_chisq <- chisq.test(talk_tab)
+
+# Pairwise Fisher's exact tests (only when 3 conditions exist)
+if (!pool_controls) {
+  fish_contact_chat <- fisher.test(talk_tab[c("Contact", "Chat"), ])
+  fish_contact_game <- fisher.test(talk_tab[c("Contact", "Game"), ])
+  fish_chat_game    <- fisher.test(talk_tab[c("Chat",    "Game"), ])
+} else {
+  fish_contact_chat <- list(p.value = NA_real_, estimate = NA_real_)
+  fish_contact_game <- fisher.test(talk_tab[c("Contact", "Control"), ])
+  fish_chat_game    <- list(p.value = NA_real_, estimate = NA_real_)
+}
+```
+
+```{r talk-partner-condition-plot}
+#| fig-cap: "Proportion choosing to talk with an outgroup member by condition. Error bars show 95% CI."
+#| fig-width: 7
+#| fig-height: 5
+
+p_talk <- ggplot(talk_by_condition,
+                 aes(x = treatment, y = pct_outgroup, color = treatment)) +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.8, linewidth = 1.2) +
+  geom_text(aes(y = ci_hi + 5, label = paste0(round(pct_outgroup), "%")),
+            size = 3.2, show.legend = FALSE) +
+  scale_color_manual(values = condition_colors) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25)) +
+  labs(y = "% Choosing Outgroup Partner", x = NULL,
+       title = "Talk Partner Preference by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+p_talk
+ggsave(paste0(fig_path, "talk_partner_by_condition.png"), p_talk, width = 7, height = 5, dpi = 300)
+```
+
+The overall chi-square test for condition differences in outgroup partner preference: *χ²* = `r numformat(talk_chisq$statistic)`, *p* `r pformat(talk_chisq$p.value)`. `r if (!pool_controls) paste0("Pairwise Fisher's exact tests show that the effect was driven by **Game vs. Contact**: Game participants chose the outgroup partner far less often (", talk_by_condition %>% filter(treatment=='Game') %>% pull(pct_outgroup) %>% numformat(0), "%) than Contact participants (", talk_by_condition %>% filter(treatment=='Contact') %>% pull(pct_outgroup) %>% numformat(0), "%), OR = ", numformat(fish_contact_game$estimate), ", *p* ", pformat(fish_contact_game$p.value), ". Contact vs. Chat did not differ significantly (*p* ", pformat(fish_contact_chat$p.value), "), nor did Chat vs. Game (*p* ", pformat(fish_chat_game$p.value), ").") else paste0("Contact vs. Control: OR = ", numformat(fish_contact_game$estimate), ", *p* ", pformat(fish_contact_game$p.value), ".")`
+
+## Combined Improvement Figure
+
+```{r combined-figure}
+#| fig-cap: "Pre-post improvement by condition across all outcomes. Error bars show ± SE from mixed-effects models. Stars indicate within-condition significance (paired pre-post difference)."
+#| fig-width: 7
+#| fig-height: 4
+
+# Collect improvement estimates from contrasts
+make_improvement_panel <- function(contrasts_tbl, title, y_lab) {
+  contrasts_tbl %>%
+    mutate(
+      stars = p_to_stars(p.value),
+      ymin = estimate - SE,
+      ymax = estimate + SE
+    ) %>%
+    ggplot(aes(x = treatment, y = estimate, color = treatment)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_pointrange(aes(ymin = ymin, ymax = ymax), size = 0.8, linewidth = 1.2) +
+    geom_text(aes(y = ymax + (max(ymax) - min(ymin)) * 0.08, label = stars),
+              size = 4, fontface = "bold", show.legend = FALSE) +
+    scale_color_manual(values = condition_colors) +
+    labs(x = NULL, y = y_lab, title = title) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "none")
+}
+
+pa <- make_improvement_panel(acc_contrasts,  "A. Accuracy",  "Improvement (neg. abs. error)")
+pb <- make_improvement_panel(warm_contrasts, "B. Warmth",    "Improvement (0-100 scale)")
+pc <- make_improvement_panel(conf_contrasts, "C. Confidence","Change (1-5 scale)")
+
+# Donation panel
+pd <- ggplot(don_by_condition, aes(x = treatment, y = M, color = treatment)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(ymin = M - SE, ymax = M + SE), size = 0.8, linewidth = 1.2) +
+  geom_text(aes(y = M + SE + 1.5, label = numformat(M)),
+            size = 3, show.legend = FALSE) +
+  scale_color_manual(values = condition_colors) +
+  labs(x = NULL, y = "Donation (cents)", title = "D. Dictator Game") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+# Talk partner panel
+pe <- ggplot(talk_by_condition, aes(x = treatment, y = pct_outgroup, color = treatment)) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.8, linewidth = 1.2) +
+  geom_text(aes(y = ci_hi + 5, label = paste0(round(pct_outgroup), "%")),
+            size = 3, show.legend = FALSE) +
+  scale_color_manual(values = condition_colors) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = NULL, y = "% Outgroup", title = "E. Talk Partner") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+p_combined <- pa + pb + pc + pd + pe + plot_layout(ncol = 5)
+ggsave(paste0(fig_path, "combined_by_condition.png"), p_combined, width = 14, height = 5, dpi = 300)
+p_combined
+```
+
+## Moderating Role of Party
+
+We also check whether the condition effects are moderated by learner party (D→R vs R→D).
+
+```{r party-moderation}
+# 3-way: time × treatment × party
+accuracy_long_party <- accuracy_long
+
+m_acc_3way <- lmer(accuracy ~ time * treatment * learner_party + (1 | ResponseId),
+                   data = accuracy_long_party, REML = FALSE)
+m_acc_2way <- lmer(accuracy ~ time * treatment + time * learner_party +
+                     treatment * learner_party + (1 | ResponseId),
+                   data = accuracy_long_party, REML = FALSE)
+
+lrt_acc <- anova(m_acc_2way, m_acc_3way)
+lrt_acc_p <- lrt_acc$`Pr(>Chisq)`[2]
+
+# Warmth 3-way
+warmth_long_party <- warmth_long
+m_warm_3way <- lmer(warmth ~ time * treatment * learner_party + (1 | ResponseId),
+                    data = warmth_long_party, REML = FALSE)
+m_warm_2way <- lmer(warmth ~ time * treatment + time * learner_party +
+                      treatment * learner_party + (1 | ResponseId),
+                    data = warmth_long_party, REML = FALSE)
+lrt_warm <- anova(m_warm_2way, m_warm_3way)
+lrt_warm_p <- lrt_warm$`Pr(>Chisq)`[2]
+```
+
+A likelihood ratio test found that party did `r if(lrt_acc_p < .05) "" else "not "` significantly moderate the condition × time interaction for accuracy (*p* `r pformat(lrt_acc_p)`) and did `r if(lrt_warm_p < .05) "" else "not "` significantly moderate it for warmth (*p* `r pformat(lrt_warm_p)`).
+
+```{r accuracy-by-condition-party-plot}
+#| fig-cap: "Estimated marginal means for accuracy by condition and learner party."
+#| fig-width: 10
+#| fig-height: 5
+
+emm_acc_party <- emmeans(m_acc_2way, ~ time | treatment * learner_party) %>%
+  as_tibble() %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+ggplot(emm_acc_party,
+       aes(x = time, y = emmean, group = interaction(treatment, learner_party),
+           color = treatment, linetype = learner_party)) +
+  geom_line(linewidth = 1.1) +
+  geom_pointrange(aes(ymin = emmean - SE, ymax = emmean + SE), size = 0.5) +
+  facet_wrap(~ learner_party, labeller = labeller(learner_party = c("D→R" = "Democrats (D→R)", "R→D" = "Republicans (R→D)"))) +
+  scale_color_manual(values = condition_colors, name = "Condition") +
+  scale_linetype_manual(values = c("D→R" = "solid", "R→D" = "dashed"), guide = "none") +
+  scale_x_discrete(labels = c("Pre", "Post"), expand = expansion(add = 0.3)) +
+  labs(y = "Accuracy (neg. abs. error)", x = NULL,
+       title = "Accuracy by Condition and Party") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+  emm_acc_party <- emmeans(m_acc_3way, ~ time | treatment * learner_party) %>%
+  as_tibble() %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+
+emm_warm_party <- emmeans(m_warm_2way, ~ time | treatment * learner_party) %>%
+  as_tibble() %>%
+  mutate(time = factor(time, levels = c("pre", "post")))
+ggplot(emm_warm_party,
+       aes(x = time, y = emmean, group = interaction(treatment, learner_party),
+           color = treatment, linetype = learner_party)) +
+  geom_line(linewidth = 1.1) +
+  geom_pointrange(aes(ymin = emmean - SE, ymax = emmean + SE), size = 0.5) +
+  facet_wrap(~ learner_party, labeller = labeller(learner_party = c("D→R" = "Democrats (D→R)", "R→D" = "Republicans (R→D)"))) +
+  scale_color_manual(values = condition_colors, name = "Condition") +
+  scale_linetype_manual(values = c("D→R" = "solid", "R→D" = "dashed"), guide = "none") +
+  scale_x_discrete(labels = c("Pre", "Post"), expand = expansion(add = 0.3)) +
+  labs(y = "Accuracy (neg. abs. error)", x = NULL,
+       title = "Accuracy by Condition and Party") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(fig_path, "accuracy_condition_party.png"), width = 10, height = 5, dpi = 300)
+```
+
+## Summary Table
+
+```{r summary-table}
+#| tbl-cap: "Pre-post changes by condition across all dependent variables."
+
+# Compute condition-level summaries for key DVs
+summary_rows <- bind_rows(
+  # Accuracy
+  dat %>% group_by(treatment) %>%
+    summarise(DV = "Accuracy",
+              Pre = mean(accuracy_pre, na.rm=TRUE) %>% numformat(),
+              Post = mean(accuracy_post, na.rm=TRUE) %>% numformat(),
+              Change = mean(accuracy_post - accuracy_pre, na.rm=TRUE) %>% numformat(),
+              .groups="drop"),
+  # Warmth
+  dat %>% group_by(treatment) %>%
+    summarise(DV = "Outgroup Warmth",
+              Pre = mean(warmth_outgroup_pre, na.rm=TRUE) %>% numformat(),
+              Post = mean(warmth_outgroup_post, na.rm=TRUE) %>% numformat(),
+              Change = mean(warmth_outgroup_post - warmth_outgroup_pre, na.rm=TRUE) %>% numformat(),
+              .groups="drop"),
+  # Confidence
+  dat %>% group_by(treatment) %>%
+    summarise(DV = "Confidence",
+              Pre = mean(confidence_outgroup_pre, na.rm=TRUE) %>% numformat(),
+              Post = mean(confidence_outgroup_post, na.rm=TRUE) %>% numformat(),
+              Change = mean(confidence_outgroup_post - confidence_outgroup_pre, na.rm=TRUE) %>% numformat(),
+              .groups="drop")
+) %>%
+  select(DV, Condition = treatment, Pre, Post, Change)
+
+summary_rows %>%
+  gt(groupname_col = "DV") %>%
+  tab_header(title = "Pre-Post Changes by Condition and DV") %>%
+  tab_footnote("Change = Post − Pre. Positive = improvement/increase.",
+               locations = cells_title())
+```

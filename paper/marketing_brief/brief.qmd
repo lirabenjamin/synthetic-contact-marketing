@@ -1,0 +1,431 @@
+---
+title: "Learning from AI Personas: Three Studies"
+subtitle: "Accuracy, age-based outgroups, and budget allocation"
+author: "Benjamin Lira, Noah Castelo, Olivier Toubia, Stefano Puntoni"
+date: today
+bibliography: references.bib
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry: margin=1in
+    fig-pos: "H"
+    tbl-pos: "H"
+    number-sections: true
+    toc: false
+    include-in-header:
+      text: |
+        \usepackage{float}
+        \usepackage{booktabs}
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+knitr::opts_chunk$set(fig.align = "center", out.width = "85%", dpi = 300)
+```
+
+```{r load}
+#| results: hide
+# Builds the talk figures (output/figures/jobtalk/) and the shared data and helpers
+source("src/r/jobtalk_bar_figures.R")
+library(knitr)
+library(sandwich)
+library(lmtest)
+
+f2 <- function(x) sprintf("%.2f", x)
+f1 <- function(x) sprintf("%.1f", x)
+fp <- function(p) if (p < .001) "p < .001" else paste0("p = ", sub("^0", "", sprintf("%.3f", p)))
+pct <- function(x) paste0(round(100 * x), "%")
+
+tab <- function(df, caption, digits = 2) {
+  kable(df, format = "latex", booktabs = TRUE, digits = digits, caption = caption, linesep = "")
+}
+contrast_table <- function(df, var, levels, higher_is_better) {
+  map(levels, ~ contrast_stats(df, {{ var }}, .x, higher_is_better)) |> list_rbind() |>
+    mutate(p = map_chr(p, fp))
+}
+
+# Study 1 numbers
+republican_truth <- gt |> filter(type == "party", group == "Republican")
+pol_raw <- read_parquet("studies/02_experimental/data/processed/analysis_data.parquet") |>
+  mutate(cond = recode(as.character(treatment), "GPT Persona" = "Persona", "Digital Twin" = "Twin"))
+pol_acc <- summarise_cond(pol, error, three)
+pol_pers <- summarise_cond(pol, persuasive, three)
+pol_acc_c <- contrast_table(pol, error, c("Persona", "Twin"), FALSE)
+pol_pers_c <- contrast_table(pol, persuasive, c("Persona", "Twin"), TRUE)
+pol_under <- mean(pol_raw$signed_error[pol_raw$cond == "Control"] < 0)
+
+# Study 2 numbers
+age_acc <- summarise_cond(age, error, three)
+age_pers <- summarise_cond(age, persuasive, three)
+age_acc_c <- contrast_table(age, error, c("Persona", "Twin"), FALSE)
+age_pers_c <- contrast_table(age, persuasive, c("Persona", "Twin"), TRUE)
+senior <- gt |> filter(type == "age", group == "65+")
+age_ctrl_est <- age |> filter(cond == "Control") |> pull(green_estimate)
+gap_t <- t.test(age_ctrl_est, mu = senior$M)
+bots <- age |> filter(cond == "Twin", !is.na(twin_green)) |> distinct(twin_id, twin_green)
+proto <- age |>
+  filter(cond == "Control" | (cond == "Twin" & !is.na(twin_dist))) |>
+  mutate(cond = case_when(cond == "Control" ~ "Control",
+                          twin_dist <= median(twin_dist, na.rm = TRUE) ~ "Typical\ntwin",
+                          TRUE ~ "Atypical\ntwin"))
+proto_levels <- c("Control", "Atypical\ntwin", "Typical\ntwin")
+proto_summ <- summarise_cond(proto, error, proto_levels)
+proto_c <- contrast_table(proto, error, c("Atypical\ntwin", "Typical\ntwin"), FALSE) |>
+  mutate(Comparison = str_replace(Comparison, "\n", " "))
+tw <- age |> filter(cond == "Twin", !is.na(twin_dist))
+m_proto <- lm(error ~ twin_dist, data = tw)
+proto_ct <- coeftest(m_proto, vcov = vcovCL(m_proto, cluster = ~ twin_id))
+
+# Study 3 numbers
+towns <- tibble(
+  market = c("harlan", "williamson", "burlington", "middlesex"),
+  label = c("Harlan County, KY", "Williamson County, TN", "Burlington, VT", "Middlesex County, MA"),
+  rS = c(0.78, 0.72, 0.32, 0.28), households = c(50000, 75000, 45000, 65000),
+  comp = c(0.20, 0.35, 0.45, 0.85))
+# Revenue model from survey-app/src/lib/gameEngine.js (expected value, no noise)
+exp_rev <- function(i, a) {
+  if (a <= 0) return(0)
+  receptive <- towns$households[i] * (towns$rS[i] * 0.65 + (1 - towns$rS[i]) * 0.75)
+  receptive * a^2 / (a^2 + 30000^2) * exp(-2 * towns$comp[i]) * 7
+}
+grid <- expand_grid(h = seq(0, 1e5, 5e3), w = seq(0, 1e5, 5e3), b = seq(0, 1e5, 5e3)) |>
+  filter(h + w + b <= 1e5) |> mutate(m = 1e5 - h - w - b)
+grid$rev <- pmap_dbl(grid, \(h, w, b, m) exp_rev(1, h) + exp_rev(2, w) + exp_rev(3, b) + exp_rev(4, m))
+optimal <- grid |> slice_max(rev, n = 1, with_ties = FALSE)
+opt_pct_R <- (optimal$h + optimal$w) / 1e5
+
+game_summ <- summarise_cond(game, pct_R, c("Control", "Twin"))
+game_c <- contrast_table(game, pct_R, "Twin", TRUE)
+game_rev_c <- contrast_table(game, pct_optimal, "Twin", TRUE)
+game_m1 <- lm(pct_R ~ cond, data = game)
+game_m2 <- lm(pct_R ~ cond + extremity + age + gender, data = game)
+game_mw <- wilcox.test(pct_R ~ cond, data = game)
+mkt <- game |>
+  pivot_longer(starts_with("alloc_"), names_to = "market", values_to = "alloc", names_prefix = "alloc_") |>
+  group_by(cond, market) |> summarise(m = mean(alloc) / 1000, .groups = "drop") |>
+  pivot_wider(names_from = cond, values_from = m) |>
+  arrange(match(market, towns$market))
+```
+
+# Introduction
+
+Marketers must often predict the views of consumers unlike themselves. These predictions are often wrong. Democrats, for example, underestimate the environmental concern of Republicans. Wrong predictions can lead to bad targeting and wasted budgets.
+
+AI personas offer a cheap way to "meet" a consumer segment. A persona is a chatbot that speaks as a member of a group. A *digital twin* is a persona built from the survey answers of one real person. We ask three questions:
+
+1. Does a short chat with a persona make marketers more accurate about an outgroup?
+2. Does the effect hold for a non-political outgroup (seniors)?
+3. Does the chat change a costly marketing decision?
+
+@tbl-overview gives the three studies. All participants did a marketing task about eco-friendly products. Our accuracy measure is the GREEN scale [@haws2014]: six items, each rated from 1 (strongly disagree) to 5 (strongly agree). Participants answered the six items *as a typical member of the outgroup would*. We compare each answer with the true group mean from the Twin-2K-500 panel [@toubia2025twin]. *Misperception* is the absolute gap between the estimate and the truth. Lower misperception means more accuracy.
+
+```{r tbl-overview}
+#| tbl-cap: "Overview of the three studies."
+tibble(
+  Study = c("1. Political", "2. Age", "3. Allocation"),
+  Participants = c(paste0(nrow(pol), " Democrats"), paste0(nrow(age), " adults under 65"),
+                   paste0(nrow(game), " Democrats")),
+  Outgroup = c("Republicans", "Seniors (65+)", "Republicans"),
+  Conditions = c("Control bot, Persona, Twin", "Control bot, Persona, Twin", "Control bot, Twin"),
+  Outcome = c("Misperception", "Misperception", "% budget to R markets")
+) |> tab(caption = NULL)
+```
+
+**How to read effect sizes.** We report Cohen's *d*: the difference between two group means, divided by their pooled standard deviation. A *d* of 0.20 is small, 0.50 is medium, and 0.80 is large. In this paper, a positive *d* always marks a benefit of the chatbot.
+
+# Study 1: Personas and twins make Democrats more accurate about Republicans
+
+## Method
+
+We recruited `r nrow(pol)` Democrats on Prolific (March 12, 2026). Each person read a marketing brief: their company is launching eco-friendly cleaning products. They then chatted for about 10 minutes with one of three chatbots, assigned at random:
+
+- **Control bot.** The bot talked about dogs. It gave no information about Republicans.
+- **Persona.** A GPT model with a prompt to speak as a typical Republican.
+- **Twin.** A digital twin of one real Republican from the Twin-2K-500 panel.
+
+After the chat, participants answered the six GREEN items as a typical Republican would. They also rated how persuasive a Republican would find one eco-friendly ad (1 = not at all, 5 = extremely). The true Republican GREEN mean is `r f2(republican_truth$M)` (*n* = `r republican_truth$n`).
+
+## Results
+
+**Control participants underestimated Republicans.** In the control group, `r pct(pol_under)` of participants placed Republicans below the true mean (@fig-s1-estimates). Both chatbots moved estimates toward the truth.
+
+```{r fig-s1-estimates}
+#| fig-cap: "[Not in talk] Estimates of the Republican GREEN score, by condition. Dots show individual participants; black points show means with 95% confidence intervals. The dashed line is the true Republican mean."
+#| fig-width: 7
+#| fig-height: 4.2
+pol_raw |>
+  mutate(cond = factor(cond, levels = three)) |>
+  ggplot(aes(x = cond, y = green_estimate, color = cond)) +
+  geom_hline(yintercept = republican_truth$M, linetype = "dashed", color = "grey40") +
+  geom_jitter(width = 0.15, height = 0.03, alpha = 0.35, size = 1.5) +
+  annotate("text", x = 3.45, y = republican_truth$M, label = "True mean", vjust = -0.5, hjust = 1, color = "grey40") +
+  stat_summary(fun.data = \(y) mean_se(y, mult = qt(.975, length(y) - 1)), color = "black", size = 0.6) +
+  scale_color_manual(values = cond_colors, guide = "none") +
+  labs(x = NULL, y = "Estimated Republican GREEN (1-5)") +
+  theme_minimal(base_size = 13) + theme(panel.grid.major.x = element_blank())
+```
+
+**Both chatbots cut misperception.** The persona cut misperception from `r f2(pol_acc$m[1])` to `r f2(pol_acc$m[2])` points (*d* = `r f2(pol_acc_c$d[1])`). The twin cut it to `r f2(pol_acc$m[3])` points (*d* = `r f2(pol_acc_c$d[2])`). Both effects are medium in size (@fig-s1-accuracy, @tbl-s1). @fig-s1-talk shows the earlier pre-post study, which sits next to Study 1 on talk slide 82.
+
+```{r fig-s1-accuracy}
+#| fig-cap: "[Talk slide 82, right panel] Misperception of Republicans, by condition. Bars show means; error bars show one standard error. Lower bars mean more accurate estimates."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_pol_acc
+```
+
+```{r fig-s1-talk}
+#| fig-cap: "[Talk slide 82, left panel] The earlier pre-post study (N = 500): the same participants rated Republicans before and after a chat."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_prepost
+```
+
+```{r tbl-s1}
+#| tbl-cap: "Study 1: Each chatbot compared with the control bot. Difference is the drop in misperception (GREEN points); positive values mean the chatbot helped."
+bind_rows(pol_acc_c |> mutate(Outcome = "Misperception"), pol_pers_c |> mutate(Outcome = "Ad persuasiveness")) |>
+  select(Outcome, everything()) |> tab(caption = NULL)
+```
+
+**The gain holds across items.** Both chatbots reduced misperception on all six GREEN items (@fig-s1-items). So the effect does not come from one question.
+
+```{r fig-s1-items}
+#| fig-cap: "[Not in talk] Misperception on each GREEN item, by condition. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 4.5
+#| out-width: "95%"
+item_labels <- c("No harm to environment", "Consider impact", "Purchases affected",
+                 "Concerned about waste", "Environmentally responsible", "Accept inconvenience")
+pol_raw |>
+  select(cond, starts_with("abs_error_")) |>
+  pivot_longer(-cond, names_to = "item", values_to = "err", names_prefix = "abs_error_") |>
+  mutate(item = factor(item_labels[as.integer(item)], levels = item_labels),
+         cond = factor(cond, levels = three)) |>
+  group_by(item, cond) |>
+  summarise(m = mean(err, na.rm = TRUE), se = sd(err, na.rm = TRUE) / sqrt(sum(!is.na(err))), .groups = "drop") |>
+  ggplot(aes(x = item, y = m, fill = cond)) +
+  geom_col(position = position_dodge(0.8), width = 0.75) +
+  geom_errorbar(aes(ymin = m - se, ymax = m + se), position = position_dodge(0.8), width = 0.2) +
+  scale_fill_manual(values = cond_colors, name = NULL) +
+  scale_x_discrete(labels = scales::label_wrap(12)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = "Misperception (|error|)") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank())
+```
+
+**The twin changed ad predictions more than the persona.** After the twin chat, participants expected Republicans to find the eco-friendly ad more persuasive (*d* = `r f2(pol_pers_c$d[2])`, `r pol_pers_c$p[2]`). The persona effect was smaller and not significant (*d* = `r f2(pol_pers_c$d[1])`, `r pol_pers_c$p[1]`; @fig-s1-persuasion).
+
+```{r fig-s1-persuasion}
+#| fig-cap: "[Talk slide 87] Predicted persuasiveness of an eco-friendly ad for Republicans, by condition. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_pol_pers
+```
+
+# Study 2: The effect holds for seniors
+
+## Method
+
+Study 2 used the same design with a non-political outgroup. Participants under 65 predicted the GREEN answers of a typical senior (65 or older). We dropped `r sum(as.numeric(read_csv(list.files("studies/03_noah_age/data/raw", full.names = TRUE), show_col_types = FALSE)[-(1:2), ] |> filter(Finished == "True") |> pull(age)) >= 65, na.rm = TRUE)` participants aged 65 or older, because they would rate their own group. This left `r nrow(age)` participants (March 23 to 24, 2026). The true senior mean is `r f2(senior$M)` (*n* = `r senior$n`).
+
+## Results
+
+**People underestimate the environmental concern of seniors.** The control group put seniors at `r f2(mean(age_ctrl_est))`, well below the true mean of `r f2(senior$M)` (*t*(`r round(gap_t$parameter)`) = `r f2(gap_t$statistic)`, `r fp(gap_t$p.value)`). In the panel data, seniors are the greenest age group. The `r nrow(bots)` senior twins in the study had a mean GREEN score of `r f2(mean(bots$twin_green))`, close to the truth (@fig-s2-gap). So the twins carried accurate information.
+
+```{r fig-s2-gap}
+#| fig-cap: "[Talk slide 85; the slide has a placeholder note, insert this figure] Actual senior GREEN scores (panel data), the estimate by the control group, and the GREEN scores of the senior twins. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_gap
+```
+
+**Both chatbots cut misperception of seniors.** The persona cut misperception from `r f2(age_acc$m[1])` to `r f2(age_acc$m[2])` points (*d* = `r f2(age_acc_c$d[1])`). The twin cut it to `r f2(age_acc$m[3])` points (*d* = `r f2(age_acc_c$d[2])`; @fig-s2-accuracy, @tbl-s2). These effects are smaller than in Study 1 but in the same direction.
+
+```{r fig-s2-accuracy}
+#| fig-cap: "[Talk slide 86] Misperception of seniors, by condition. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_age_acc
+```
+
+```{r tbl-s2}
+#| tbl-cap: "Study 2: Each chatbot compared with the control bot. Positive values mean the chatbot helped."
+bind_rows(age_acc_c |> mutate(Outcome = "Misperception"), age_pers_c |> mutate(Outcome = "Ad persuasiveness")) |>
+  select(Outcome, everything()) |> tab(caption = NULL)
+```
+
+**Only the persona changed ad predictions.** The persona raised predicted ad persuasiveness for seniors (*d* = `r f2(age_pers_c$d[1])`, `r age_pers_c$p[1]`). The twin did not (*d* = `r f2(age_pers_c$d[2])`, `r age_pers_c$p[2]`; @fig-s2-persuasion). This result is the reverse of Study 1, so we treat the ad results as mixed.
+
+```{r fig-s2-persuasion}
+#| fig-cap: "[Not in talk; the talk shows only the political panel] Predicted persuasiveness of an eco-friendly ad for seniors, by condition. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_age_pers
+```
+
+**Typical twins teach the most.** Each participant met one senior twin at random. The twins differed in their distance from the true senior mean. We split the twins at the median distance: `r proto_summ$n[3]` participants met a typical twin, and `r proto_summ$n[2]` met an atypical twin. Participants who met a typical twin cut misperception to `r f2(proto_summ$m[3])` points (*d* = `r f2(proto_c$d[2])` vs. control). Participants who met an atypical twin barely improved (*d* = `r f2(proto_c$d[1])`; @fig-s2-proto, @tbl-s2-proto). @fig-s2-proto-cont shows the same pattern without the split: each extra GREEN point of twin distance raised misperception by `r f2(proto_ct[2, 1])` points (*b*, SE clustered by twin = `r f2(proto_ct[2, 2])`, `r fp(proto_ct[2, 4])`).
+
+```{r fig-s2-proto}
+#| fig-cap: "[Talk slide 89] Misperception of seniors for the control group and for participants who met an atypical or a typical twin (median split on the twin's distance from the true senior mean). Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_proto
+```
+
+```{r tbl-s2-proto}
+#| tbl-cap: "Study 2: Typical and atypical twins compared with the control bot."
+proto_c |> tab(caption = NULL)
+```
+
+```{r fig-s2-proto-cont}
+#| fig-cap: "[Not in talk] Misperception against the distance between the assigned twin and the true senior mean. Each dot is one participant in the twin condition. The line is a linear fit with a 95% confidence band; the grey band shows the control group's 95% confidence interval."
+#| fig-width: 7
+#| fig-height: 4.2
+ctrl_ci <- t.test(age$error[age$cond == "Control"])$conf.int
+ggplot(tw, aes(x = twin_dist, y = error)) +
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = ctrl_ci[1], ymax = ctrl_ci[2], fill = "grey80", alpha = 0.6) +
+  annotate("text", x = max(tw$twin_dist), y = ctrl_ci[2], label = "Control", hjust = 1, vjust = -0.5, color = "grey40") +
+  geom_jitter(width = 0.02, height = 0, alpha = 0.5, size = 1.8, color = cond_colors[["Twin"]]) +
+  geom_smooth(method = "lm", color = cond_colors[["Twin"]], fill = cond_colors[["Twin"]], alpha = 0.15) +
+  labs(x = "Twin's distance from the true senior mean (GREEN points)", y = "Misperception (|error|)") +
+  theme_minimal(base_size = 13)
+```
+
+# Study 3: A twin chat shifts budget toward Republican markets
+
+## Method
+
+We recruited `r nrow(game)` Democrats (April 3, 2026). Each person chatted with either a twin of a real Republican or a control bot about dogs. Then they played a one-round marketing game. They were the marketing director for a company that sells energy-saving appliances. They split a \$100,000 budget across four markets. For each market, they saw its party split and its number of households (@tbl-s3-markets). They did not see the level of competition in each market. The game had one round, no feedback, and no performance bonus.
+
+```{r tbl-s3-markets}
+#| tbl-cap: "Study 3: The four markets. Participants saw the first three columns. The revenue-maximizing allocation comes from the game's revenue model."
+towns |>
+  mutate(`Republican share` = pct(rS), Households = scales::comma(households),
+         `Best allocation` = scales::dollar(c(optimal$h, optimal$w, optimal$b, optimal$m))) |>
+  select(Market = label, `Republican share`, Households, `Best allocation`) |>
+  tab(caption = NULL)
+```
+
+In the game, Republican households were only slightly less likely to buy (65% vs. 75%), and the Republican markets had less competition. So the best plan put `r pct(opt_pct_R)` of the budget into the two Republican markets. Our outcome is the share of the budget that each participant put into those two markets.
+
+## Results
+
+**Twin participants put more budget into Republican markets.** Control participants put `r f1(game_summ$m[1])`% of their budget into Republican markets. Twin participants put `r f1(game_summ$m[2])`% there, a gain of `r f1(game_c$Difference)` percentage points (*d* = `r f2(game_c$d)`; @fig-s3-main). This effect is small to medium. It is also marginal: `r game_c$p`, and the confidence interval for *d* includes zero (@tbl-s3). A rank-based test gives the same answer (Mann-Whitney `r fp(game_mw$p.value)`). Both groups stayed far below the best plan of `r pct(opt_pct_R)`.
+
+```{r fig-s3-main}
+#| fig-cap: "[Talk slide 84] Share of the budget allocated to the two Republican-leaning markets, by condition. Error bars show one standard error."
+#| fig-width: 8
+#| fig-height: 5.5
+#| out-width: "80%"
+p_game
+```
+
+```{r fig-s3-dist}
+#| fig-cap: "[Not in talk] Distribution of the share of budget allocated to Republican markets. The dashed line shows the revenue-maximizing share."
+#| fig-width: 7
+#| fig-height: 4
+game |>
+  mutate(cond = factor(cond, levels = c("Control", "Twin"))) |>
+  ggplot(aes(x = pct_R, fill = cond)) +
+  geom_histogram(binwidth = 10, boundary = 0, color = "white") +
+  geom_vline(xintercept = 100 * opt_pct_R, linetype = "dashed", color = "grey40") +
+  facet_wrap(~ cond, ncol = 1) +
+  scale_fill_manual(values = cond_colors, guide = "none") +
+  labs(x = "% budget to Republican markets", y = "Participants") +
+  theme_minimal(base_size = 13)
+```
+
+**Harlan County received the largest shift.** Twin participants gave Harlan \$`r f1(mkt$Twin[1])`k on average, versus \$`r f1(mkt$Control[1])`k for control. Their spending on Williamson barely changed (\$`r f1(mkt$Twin[2])`k vs. \$`r f1(mkt$Control[2])`k). They gave less to both Democratic markets (@fig-s3-markets).
+
+```{r fig-s3-markets}
+#| fig-cap: "[Not in talk] Mean allocation to each market, by condition. Error bars show one standard error. The dark diamonds show the revenue-maximizing allocation."
+#| fig-width: 8
+#| fig-height: 4.2
+#| out-width: "95%"
+opt_long <- tibble(market = towns$market, best = c(optimal$h, optimal$w, optimal$b, optimal$m) / 1000)
+game |>
+  select(cond, starts_with("alloc_")) |>
+  pivot_longer(-cond, names_to = "market", values_to = "alloc", names_prefix = "alloc_") |>
+  group_by(cond, market) |>
+  summarise(m = mean(alloc) / 1000, se = sd(alloc) / sqrt(n()) / 1000, .groups = "drop") |>
+  left_join(towns |> select(market, label), by = "market") |>
+  mutate(label = factor(label, levels = towns$label), cond = factor(cond, levels = c("Control", "Twin"))) |>
+  ggplot(aes(x = label, y = m, fill = cond)) +
+  geom_col(position = position_dodge(0.8), width = 0.75) +
+  geom_errorbar(aes(ymin = m - se, ymax = m + se), position = position_dodge(0.8), width = 0.2) +
+  geom_point(data = opt_long |> left_join(towns |> select(market, label), by = "market") |>
+               mutate(label = factor(label, levels = towns$label)),
+             aes(x = label, y = best), inherit.aes = FALSE, shape = 18, size = 5, color = "#2C3E50") +
+  scale_fill_manual(values = cond_colors, name = NULL) +
+  scale_x_discrete(labels = scales::label_wrap(12)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = "Mean allocation ($ thousands)") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank())
+```
+
+**Better allocation meant more revenue.** Twin participants earned `r f1(mean(game$pct_optimal[game$cond == "Twin"]))`% of the best possible revenue, versus `r f1(mean(game$pct_optimal[game$cond == "Control"]))`% for control (*d* = `r f2(game_rev_c$d)`, `r game_rev_c$p`; @fig-s3-revenue). The revenue in each game included random noise, so this test is weaker than the allocation test.
+
+```{r fig-s3-revenue}
+#| fig-cap: "[Not in talk] Revenue as a percentage of the best possible revenue, by condition. Error bars show one standard error."
+#| fig-width: 6
+#| fig-height: 4.2
+finish(cond_bars(summarise_cond(game, pct_optimal, c("Control", "Twin")),
+                 contrast_vs_control(game, pct_optimal, "Twin", TRUE),
+                 ylab = "% of best possible revenue", ymax = 100, digits = 1))
+```
+
+```{r tbl-s3}
+#| tbl-cap: "Study 3: Regression of the share of budget to Republican markets (percentage points) on condition, without and with covariates. Coefficient for Twin vs. control."
+bind_rows(
+  broom::tidy(game_m1, conf.int = TRUE) |> mutate(Model = "Condition only"),
+  broom::tidy(game_m2, conf.int = TRUE) |> mutate(Model = "+ extremity, age, gender")
+) |>
+  filter(term == "condTwin") |>
+  transmute(Model, b = estimate, SE = std.error, `95% CI` = sprintf("[%.1f, %.1f]", conf.low, conf.high),
+            p = map_chr(p.value, fp), N = c(nobs(game_m1), nobs(game_m2))) |>
+  tab(caption = NULL)
+```
+
+# Discussion
+
+A short chat with an AI persona made people more accurate about two outgroups. The gain appeared for Republicans (Study 1) and for seniors (Study 2). Twins and generic personas helped by similar amounts. Twins helped more when the real person behind the twin was typical of the group. In a budget game, a twin chat moved money toward Republican markets, which the game rewarded (Study 3).
+
+The studies have three limits. First, Study 3 is small and its effect is marginal. A larger replication should come first. Second, the ad-persuasiveness results point in different directions across Studies 1 and 2. Third, all participants were online panel members. The response of professional marketers is still unknown.
+
+\clearpage
+
+# Appendix: Figure order check against the talk {.unnumbered}
+
+The talk outline (slide 7) lists Part 2 as S1 accuracy, S2 age, S3 allocation. The deck itself shows the allocation result (slide 84) *before* the age results (slides 85 to 89). Pick one order and match the outline to it.
+
+The table below lists the talk slides in Part 2 and the matching figures in this document. Slide numbers come from BU_JobTalk.pptx as saved on October 7, 2026, 16:13.
+
+```{r order-table}
+tribble(
+  ~`Talk slide`, ~`Slide title`, ~`Figure here`,
+  "82", "People get more accurate", "Fig. 3 (left) + Fig. 2 (right)",
+  "83", "Make a video", "None",
+  "84", "Higher allocation to R markets", "Fig. 11",
+  "85", "Age misperception (note only)", "Fig. 6 (add to slide)",
+  "86", "Seniors: better understanding", "Fig. 7",
+  "87", "Changes marketing predictions", "Fig. 5 (political only)",
+  "88", "Twin prototypicality", "Concept slide",
+  "89", "Prototypical twins more effective", "Fig. 9"
+) |> tab(caption = NULL)
+```
+
+# References {.unnumbered}

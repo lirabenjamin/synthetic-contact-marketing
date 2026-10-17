@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Green Market</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { background: #f0f4f0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .partisan-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; }
+    .rep-seg { background: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; }
+    .dem-seg { background: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.10); padding: 16px; }
+    .btn-primary { background: #16a34a; color: white; border: none; border-radius: 8px; padding: 12px 28px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .btn-primary:hover { background: #15803d; }
+    .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn-secondary { background: #e5e7eb; color: #374151; border: none; border-radius: 8px; padding: 10px 22px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .btn-secondary:hover { background: #d1d5db; }
+    input[type=range] { width: 100%; accent-color: #16a34a; }
+    .budget-bar-wrap { height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
+    .budget-bar-fill { height: 100%; border-radius: 5px; transition: width 0.2s; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { font-weight: 700; color: #374151; background: #f9fafb; }
+    .screen { min-height: 100vh; padding: 24px 16px; max-width: 700px; margin: 0 auto; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; }
+    .tag-low { background: #dcfce7; color: #15803d; }
+    .tag-medium { background: #fef9c3; color: #a16207; }
+    .tag-high { background: #fee2e2; color: #b91c1c; }
+    .tag-veryhigh { background: #fce7f3; color: #9d174d; }
+    .debrief-panel { margin-bottom: 32px; }
+    .twist-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .twist-table th, .twist-table td { padding: 10px 16px; border: 1px solid #e5e7eb; }
+    .twist-table th { background: #f9fafb; }
+    .cite { font-size: 13px; color: #6b7280; margin-top: 6px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useReducer, useMemo, useCallback } = React;
+
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
+
+const RECEPTIVITY = { democrat: 0.75, republican: 0.65 };
+const PRICE_PER_CONVERSION = 7;   // $7 revenue per converted customer — calibrated for realistic ROI
+const COMPETITION_K = 1.5;        // steepness of exponential competition penalty
+const TOTAL_ROUNDS = 8;
+const ROUND_BUDGET = 100000;
+
+const TOWN_COLORS = ['#16a34a', '#ca8a04', '#dc2626', '#7c3aed'];
+
+const TOWNS = [
+  {
+    id: 'harlan',
+    name: 'Harlan County, KY',
+    archetype: 'Rural Appalachian',
+    repSplit: 0.78, demSplit: 0.22,
+    marketSize: 55000, competition: 0.20,
+  },
+  {
+    id: 'williamson',
+    name: 'Williamson County, TN',
+    archetype: 'Affluent Southern Suburb',
+    repSplit: 0.72, demSplit: 0.28,
+    marketSize: 80000, competition: 0.30,
+  },
+  {
+    id: 'macomb',
+    name: 'Macomb County, MI',
+    archetype: 'Rust Belt Suburb',
+    repSplit: 0.52, demSplit: 0.48,
+    marketSize: 50000, competition: 0.55,
+  },
+  {
+    id: 'middlesex',
+    name: 'Middlesex County, MA',
+    archetype: 'Urban Northeast Metro',
+    repSplit: 0.28, demSplit: 0.72,
+    marketSize: 65000, competition: 0.90,
+  },
+];
+
+// ─── PAYOFF LOGIC ────────────────────────────────────────────────────────────
+
+function normalDraw(mean, sd) {
+  let u1 = Math.random(), u2 = Math.random();
+  while (u1 === 0) u1 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return mean + sd * z;
+}
+
+function payoffComponents(town, allocation) {
+  const receptive = town.marketSize * (town.repSplit * RECEPTIVITY.republican + town.demSplit * RECEPTIVITY.democrat);
+  const allocFrac = allocation > 0 ? Math.log1p(allocation / 10000) / Math.log1p(10) : 0;
+  const compDiscount = Math.exp(-COMPETITION_K * town.competition);
+  const mean = receptive * allocFrac * compDiscount * PRICE_PER_CONVERSION;
+  return { receptive, allocFrac, compDiscount, mean };
+}
+
+function computePayoff(town, allocation) {
+  if (allocation <= 0) return 0;
+  const { mean } = payoffComponents(town, allocation);
+  const sd = mean * 0.20 + Math.sqrt(allocation) * 2;
+  return Math.max(0, normalDraw(mean, sd));
+}
+
+function computeExpectedROI(town, allocation) {
+  if (allocation <= 0) return 0;
+  return payoffComponents(town, allocation).mean;
+}
+
+function computeOptimalSingleRound() {
+  const step = 5000;
+  const steps = ROUND_BUDGET / step;
+  let alloc = Object.fromEntries(TOWNS.map(t => [t.id, 0]));
+  for (let i = 0; i < steps; i++) {
+    let bestTown = null, bestGain = -Infinity;
+    for (const town of TOWNS) {
+      const gain = computeExpectedROI(town, alloc[town.id] + step) - computeExpectedROI(town, alloc[town.id]);
+      if (gain > bestGain) { bestGain = gain; bestTown = town.id; }
+    }
+    alloc[bestTown] += step;
+  }
+  return { alloc, total: TOWNS.reduce((s, t) => s + computeExpectedROI(t, alloc[t.id]), 0) };
+}
+
+const OPTIMAL = computeOptimalSingleRound();
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+function fmt$(n) {
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1000) return '$' + Math.round(n / 1000) + 'k';
+  return '$' + Math.round(n);
+}
+
+function fmtFull$(n) {
+  return '$' + Math.round(n).toLocaleString();
+}
+
+function compLabel(c) {
+  if (c <= 0.25) return { label: 'Low competition', cls: 'tag-low' };
+  if (c <= 0.50) return { label: 'Medium competition', cls: 'tag-medium' };
+  if (c <= 0.75) return { label: 'High competition', cls: 'tag-high' };
+  return { label: 'Very High competition', cls: 'tag-veryhigh' };
+}
+
+function roundInsight(round) {
+  if (round <= 3) return "Early days — keep exploring different markets!";
+  if (round <= 6) return "Notice any patterns forming across markets?";
+  if (round <= 9) return `${10 - round} rounds left — time to optimize your strategy.`;
+  return "Final round complete. Let's see what you discovered.";
+}
+
+// ─── INITIAL STATE & REDUCER ─────────────────────────────────────────────────
+
+const emptyAlloc = () => Object.fromEntries(TOWNS.map(t => [t.id, 0]));
+
+const initialState = {
+  screen: 'start',
+  round: 1,
+  cumulativeEarnings: 0,
+  currentAllocation: emptyAlloc(),
+  roundHistory: [],
+  optimalEarnings: null,
+  roundBudget: ROUND_BUDGET,
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'START_GAME':
+      return { ...initialState, screen: 'briefing' };
+
+    case 'BEGIN_ROUNDS':
+      return { ...state, screen: 'allocation' };
+
+    case 'SET_ALLOCATION':
+      return {
+        ...state,
+        currentAllocation: { ...state.currentAllocation, [action.townId]: action.amount },
+      };
+
+    case 'RESET_ALLOCATION':
+      return { ...state, currentAllocation: emptyAlloc() };
+
+    case 'AUTOSCALE': {
+      const total = Object.values(state.currentAllocation).reduce((a, b) => a + b, 0);
+      if (total === 0) return state;
+      const factor = state.roundBudget / total;
+      const scaled = Object.fromEntries(
+        Object.entries(state.currentAllocation).map(([k, v]) => [k, Math.round(v * factor / 1000) * 1000])
+      );
+      const scaledTotal = Object.values(scaled).reduce((a, b) => a + b, 0);
+      const diff = state.roundBudget - scaledTotal;
+      if (diff !== 0) scaled[Object.keys(scaled)[0]] += diff;
+      return { ...state, currentAllocation: scaled };
+    }
+
+    case 'SUBMIT_ALLOCATION': {
+      const payouts = {};
+      let roundTotal = 0;
+      for (const town of TOWNS) {
+        const alloc = state.currentAllocation[town.id];
+        const p = computePayoff(town, alloc);
+        payouts[town.id] = p;
+        roundTotal += p;
+      }
+      const newEntry = {
+        round: state.round,
+        allocations: { ...state.currentAllocation },
+        payouts,
+        roundTotal,
+      };
+      const newHistory = [...state.roundHistory, newEntry];
+      const isLast = state.round === TOTAL_ROUNDS;
+      return {
+        ...state,
+        screen: 'results',
+        cumulativeEarnings: state.cumulativeEarnings + roundTotal,
+        roundHistory: newHistory,
+        optimalEarnings: isLast ? OPTIMAL.total * TOTAL_ROUNDS : null,
+      };
+    }
+
+    case 'NEXT_ROUND':
+      if (state.round === TOTAL_ROUNDS) {
+        return { ...state, screen: 'debrief' };
+      }
+      return {
+        ...state,
+        screen: 'allocation',
+        round: state.round + 1,
+        currentAllocation: emptyAlloc(),
+      };
+
+    case 'RESTART':
+      return { ...initialState, screen: 'start' };
+
+    default:
+      return state;
+  }
+}
+
+// ─── SHARED COMPONENTS ───────────────────────────────────────────────────────
+
+function PartisanBar({ repSplit, demSplit }) {
+  const rp = Math.round(repSplit * 100);
+  const dp = 100 - rp;
+  return (
+    <div className="partisan-bar">
+      <div className="rep-seg" style={{ width: `${rp}%`, minWidth: rp > 8 ? undefined : 0 }}>
+        {rp > 12 ? `${rp}% R` : ''}
+      </div>
+      <div className="dem-seg" style={{ width: `${dp}%` }}>
+        {dp > 12 ? `${dp}% D` : ''}
+      </div>
+    </div>
+  );
+}
+
+function TownCard({ town }) {
+  const cl = compLabel(town.competition);
+  return (
+    <div>
+      <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 2 }}>{town.name}</div>
+      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>{town.archetype}</div>
+      <PartisanBar repSplit={town.repSplit} demSplit={town.demSplit} />
+      <div style={{ marginTop: 6 }}>
+        <span className={`tag ${cl.cls}`}>{cl.label}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── START SCREEN ─────────────────────────────────────────────────────────────
+
+function StartScreen({ dispatch }) {
+  const [showExplainer, setShowExplainer] = useState(false);
+
+  return (
+    <div className="screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div style={{ textAlign: 'center', maxWidth: 520 }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>🌿</div>
+        <h1 style={{ fontSize: 36, fontWeight: 800, color: '#15803d', marginBottom: 8 }}>Green Market</h1>
+        <p style={{ fontSize: 17, color: '#374151', marginBottom: 8, fontWeight: 600 }}>
+          A Marketing Strategy Game
+        </p>
+        <p style={{ fontSize: 15, color: '#6b7280', marginBottom: 32, lineHeight: 1.6 }}>
+          You're the regional marketing director for <strong>EcoChoice</strong>, a company selling
+          sustainable home products. Over 8 rounds, allocate your marketing budget
+          across four US markets. Which communities deliver the best return?
+        </p>
+
+        <button className="btn-primary" style={{ fontSize: 18, padding: '14px 48px', marginBottom: 16 }}
+          onClick={() => dispatch({ type: 'START_GAME' })}>
+          Start Game
+        </button>
+
+        <div>
+          <button
+            className="btn-secondary"
+            style={{ fontSize: 13, padding: '7px 16px' }}
+            onClick={() => setShowExplainer(v => !v)}
+          >
+            {showExplainer ? 'Hide' : 'How it works / Reveal the answer'}
+          </button>
+        </div>
+
+        {showExplainer && (
+          <div className="card" style={{ textAlign: 'left', marginTop: 12, border: '2px solid #fcd34d', background: '#fffbeb' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10, color: '#92400e' }}>
+              Simulation Logic (Spoilers)
+            </div>
+            <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 10 }}>
+              Each market has a hidden <strong>environmental receptivity</strong> rate — the fraction of
+              residents likely to buy EcoChoice products:
+            </p>
+            <table style={{ width: '100%', fontSize: 14, marginBottom: 12 }}>
+              <tbody>
+                <tr>
+                  <td style={{ padding: '4px 8px', fontWeight: 600 }}>Democrat voters</td>
+                  <td style={{ padding: '4px 8px', color: '#2563eb', fontWeight: 700 }}>75% receptivity</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '4px 8px', fontWeight: 600 }}>Republican voters</td>
+                  <td style={{ padding: '4px 8px', color: '#dc2626', fontWeight: 700 }}>65% receptivity</td>
+                  <td style={{ padding: '4px 8px', fontSize: 12, color: '#6b7280' }}>(most people assume ~15%)</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style={{ background: '#f3f4f6', borderRadius: 6, padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, marginBottom: 10, lineHeight: 1.8 }}>
+              receptive = market_size × (R% × 0.65 + D% × 0.75)<br/>
+              spend_fraction = log(1 + spend/10,000) / log(11)  <span style={{ color: '#6b7280' }}>← diminishing returns</span><br/>
+              competition_discount = e^(−1.5 × competition)<br/>
+              mean_revenue = receptive × spend_fraction × discount × $5<br/>
+              actual_revenue ~ Normal(mean, 20% noise)
+            </div>
+            <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7 }}>
+              <strong>Why Republican markets win:</strong> Their competition levels are much lower
+              (0.20–0.30 vs 0.90 for Dem metros). Low competition means far more of your spend
+              actually reaches receptive customers.
+            </p>
+          </div>
+        )}
+
+        <p style={{ marginTop: 20, fontSize: 13, color: '#9ca3af' }}>
+          8 rounds · No sign-in required
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── BRIEFING SCREEN ─────────────────────────────────────────────────────────
+
+function BriefingScreen({ dispatch }) {
+  return (
+    <div className="screen">
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 26, fontWeight: 800, color: '#15803d' }}>Your Mission</h2>
+        <div className="card" style={{ marginTop: 12, padding: 20 }}>
+          <p style={{ color: '#374151', lineHeight: 1.7, fontSize: 15 }}>
+            You're launching a 10-round marketing campaign for <strong>EcoChoice's</strong> new
+            line of sustainable home products. Each round you have <strong>$100,000</strong> to
+            allocate across four US markets.
+          </p>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 14, marginTop: 14 }}>
+            <strong style={{ color: '#15803d' }}>How it works:</strong>
+            <ul style={{ marginTop: 8, paddingLeft: 20, color: '#374151', fontSize: 14, lineHeight: 1.9 }}>
+              <li>Each market has a <strong>political lean</strong> (R/D split) and a <strong>competition level</strong></li>
+              <li>Both affect how much revenue your spend generates</li>
+              <li>You'll see dollar returns after every round — use that to sharpen your strategy</li>
+              <li>Goal: <strong>maximize cumulative earnings over 8 rounds</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 12 }}>The Four Markets</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32 }}>
+        {TOWNS.map(town => (
+          <div key={town.id} className="card" style={{ padding: 14 }}>
+            <TownCard town={town} />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ textAlign: 'center' }}>
+        <button className="btn-primary" style={{ fontSize: 17 }} onClick={() => dispatch({ type: 'BEGIN_ROUNDS' })}>
+          Begin Round 1 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ALLOCATION SCREEN ───────────────────────────────────────────────────────
+
+function AllocationScreen({ state, dispatch }) {
+  const { round, currentAllocation, cumulativeEarnings, roundBudget } = state;
+  const totalAllocated = Object.values(currentAllocation).reduce((a, b) => a + b, 0);
+  const remaining = roundBudget - totalAllocated;
+  const overBudget = totalAllocated > roundBudget;
+  const nothingAllocated = totalAllocated === 0;
+
+  const setAlloc = useCallback((townId, amount) => {
+    dispatch({ type: 'SET_ALLOCATION', townId, amount: Math.max(0, Math.round(amount / 1000) * 1000) });
+  }, [dispatch]);
+
+  const fillPct = Math.min(1, totalAllocated / roundBudget);
+
+  return (
+    <div className="screen">
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#111827', margin: 0 }}>
+            Round {round} <span style={{ color: '#6b7280', fontWeight: 400, fontSize: 15 }}>of {TOTAL_ROUNDS}</span>
+          </h2>
+          <p style={{ color: '#6b7280', fontSize: 13, margin: '3px 0 0' }}>
+            Cumulative earnings: <strong style={{ color: '#15803d' }}>{fmtFull$(cumulativeEarnings)}</strong>
+          </p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: overBudget ? '#dc2626' : '#15803d' }}>
+            {overBudget ? `Over by ${fmtFull$(totalAllocated - roundBudget)}` : `${fmtFull$(remaining)} left`}
+          </div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>Budget: {fmtFull$(roundBudget)}</div>
+        </div>
+      </div>
+
+      {/* Budget bar */}
+      <div style={{ marginBottom: 20 }}>
+        <div className="budget-bar-wrap">
+          <div className="budget-bar-fill" style={{
+            width: `${Math.min(100, fillPct * 100)}%`,
+            background: overBudget ? '#dc2626' : '#16a34a',
+          }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
+          <span>$0</span><span>Allocated: {fmtFull$(totalAllocated)}</span><span>{fmtFull$(roundBudget)}</span>
+        </div>
+      </div>
+
+      {/* Town allocation cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+        {TOWNS.map(town => (
+          <TownAllocationCard
+            key={town.id}
+            town={town}
+            allocated={currentAllocation[town.id]}
+            onChange={setAlloc}
+            roundBudget={roundBudget}
+          />
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
+        <button className="btn-secondary" onClick={() => dispatch({ type: 'RESET_ALLOCATION' })}>
+          Clear All
+        </button>
+        <button className="btn-secondary" onClick={() => dispatch({ type: 'AUTOSCALE' })} disabled={nothingAllocated}>
+          Scale to $100k
+        </button>
+        <button
+          className="btn-primary"
+          disabled={overBudget || nothingAllocated}
+          onClick={() => dispatch({ type: 'SUBMIT_ALLOCATION' })}
+        >
+          Submit Allocations →
+        </button>
+      </div>
+      {overBudget && (
+        <p style={{ color: '#dc2626', textAlign: 'center', marginTop: 8, fontSize: 14 }}>
+          Over budget — reduce your allocations before submitting.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TownAllocationCard({ town, allocated, onChange, roundBudget }) {
+  const pct = Math.round((allocated / roundBudget) * 100);
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <TownCard town={town} />
+      <div style={{ marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Allocation</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>{fmtFull$(allocated)} ({pct}%)</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={roundBudget}
+          step={5000}
+          value={allocated}
+          onChange={e => onChange(town.id, Number(e.target.value))}
+          style={{ marginBottom: 6 }}
+        />
+        <input
+          type="number"
+          min={0}
+          max={roundBudget}
+          step={1000}
+          value={allocated}
+          onChange={e => onChange(town.id, Number(e.target.value))}
+          style={{ width: '100%', padding: '5px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, outline: 'none' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── RESULTS SCREEN ───────────────────────────────────────────────────────────
+
+function ResultsScreen({ state, dispatch }) {
+  const { round, roundHistory, cumulativeEarnings } = state;
+  const lastRound = roundHistory[roundHistory.length - 1];
+  const prevRound = roundHistory.length >= 2 ? roundHistory[roundHistory.length - 2] : null;
+  const isLast = round === TOTAL_ROUNDS;
+
+  return (
+    <div className="screen">
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: '#111827', marginBottom: 4 }}>
+        Round {round} Results
+      </h2>
+      <p style={{ color: '#6b7280', marginBottom: 18, fontSize: 13 }}>{roundInsight(round)}</p>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th style={{ textAlign: 'right' }}>Spent</th>
+              <th style={{ textAlign: 'right' }}>Revenue</th>
+              <th style={{ textAlign: 'right' }}>ROI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {TOWNS.map(town => {
+              const alloc = lastRound.allocations[town.id];
+              const payout = lastRound.payouts[town.id];
+              const roiNum = alloc > 0 ? payout / alloc : null;
+              const roiStr = roiNum !== null ? roiNum.toFixed(2) + '×' : '—';
+              const didInvest = alloc > 0;
+              return (
+                <tr key={town.id} style={{ opacity: didInvest ? 1 : 0.4 }}>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{town.name}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{town.archetype}</div>
+                  </td>
+                  <td style={{ textAlign: 'right', fontSize: 13 }}>{didInvest ? fmtFull$(alloc) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontSize: 13, fontWeight: didInvest ? 700 : 400, color: didInvest ? (payout >= alloc ? '#16a34a' : '#dc2626') : '#9ca3af' }}>
+                    {didInvest ? fmtFull$(payout) : '—'}
+                  </td>
+                  <td style={{ textAlign: 'right', fontSize: 13 }}>{roiStr}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: prevRound ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12, marginBottom: 22 }}>
+        <div className="card" style={{ padding: 14, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>This Round</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>{fmtFull$(lastRound.roundTotal)}</div>
+        </div>
+        {prevRound && (
+          <div className="card" style={{ padding: 14, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 3 }}>Round {round - 1}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#6b7280' }}>{fmtFull$(prevRound.roundTotal)}</div>
+            <div style={{ fontSize: 11, marginTop: 3, color: lastRound.roundTotal >= prevRound.roundTotal ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+              {lastRound.roundTotal >= prevRound.roundTotal ? '▲' : '▼'}{' '}
+              {fmt$(Math.abs(lastRound.roundTotal - prevRound.roundTotal))}
+            </div>
+          </div>
+        )}
+        <div className="card" style={{ padding: 14, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>Cumulative Total</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#111827' }}>{fmtFull$(cumulativeEarnings)}</div>
+        </div>
+      </div>
+
+      <div style={{ textAlign: 'center' }}>
+        <button
+          className="btn-primary"
+          style={{ fontSize: 16 }}
+          onClick={() => dispatch({ type: 'NEXT_ROUND' })}
+        >
+          {isLast ? 'See Final Debrief →' : `Begin Round ${round + 1} →`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── DEBRIEF SCREEN ───────────────────────────────────────────────────────────
+
+function DebriefScreen({ state, dispatch }) {
+  const { cumulativeEarnings, roundHistory, optimalEarnings } = state;
+  const optEarn = optimalEarnings || (OPTIMAL.total * TOTAL_ROUNDS);
+  const pctOfOptimal = Math.round((cumulativeEarnings / optEarn) * 100);
+
+  const townStats = TOWNS.map(town => {
+    let totalAlloc = 0, totalPayout = 0;
+    for (const rh of roundHistory) {
+      totalAlloc += rh.allocations[town.id] || 0;
+      totalPayout += rh.payouts[town.id] || 0;
+    }
+    const avgROI = totalAlloc > 0 ? totalPayout / totalAlloc : 0;
+    const optAlloc = OPTIMAL.alloc[town.id];
+    return { town, totalAlloc, totalPayout, avgROI, optAlloc };
+  });
+
+  const sortedByR = [...townStats].sort((a, b) => b.town.repSplit - a.town.repSplit);
+
+  return (
+    <div className="screen">
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ fontSize: 40 }}>🎉</div>
+        <h2 style={{ fontSize: 28, fontWeight: 800, color: '#111827', marginBottom: 4 }}>Campaign Complete!</h2>
+        <p style={{ color: '#6b7280', fontSize: 15 }}>Here's what you discovered — and what the data actually shows.</p>
+      </div>
+
+      {/* Panel 1: Performance */}
+      <div className="card debrief-panel">
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 14 }}>Your Performance</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>Your Total Revenue</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#15803d' }}>{fmtFull$(cumulativeEarnings)}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>Expected Optimal</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#6b7280' }}>{fmtFull$(optEarn)}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>You Achieved</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: pctOfOptimal >= 80 ? '#15803d' : pctOfOptimal >= 60 ? '#ca8a04' : '#dc2626' }}>
+              {pctOfOptimal}% of optimal
+            </div>
+          </div>
+        </div>
+        <div style={{ height: 10, background: '#e5e7eb', borderRadius: 5, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.min(100, pctOfOptimal)}%`, background: pctOfOptimal >= 80 ? '#16a34a' : pctOfOptimal >= 60 ? '#ca8a04' : '#dc2626', borderRadius: 5 }} />
+        </div>
+        <p style={{ fontSize: 13, color: '#6b7280', marginTop: 8 }}>
+          Optimal strategy: concentrate spending in Republican-leaning markets where competition is low — meaning more of your budget actually reaches receptive customers.
+        </p>
+      </div>
+
+      {/* Panel 2: Investment History */}
+      <div className="card debrief-panel">
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Where You Invested Over Time</h3>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+          Each bar shows how you split your budget that round. Did your strategy shift?
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          {TOWNS.map((town, i) => (
+            <div key={town.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+              <div style={{ width: 11, height: 11, background: TOWN_COLORS[i], borderRadius: 2 }} />
+              <span style={{ color: '#374151' }}>{town.name.split(',')[0]}</span>
+            </div>
+          ))}
+        </div>
+        {roundHistory.map((rh, ri) => {
+          const total = Object.values(rh.allocations).reduce((a, b) => a + b, 0) || 1;
+          return (
+            <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: '#6b7280', width: 44, flexShrink: 0 }}>Rd {rh.round}</span>
+              <div style={{ flex: 1, height: 20, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                {TOWNS.map((town, i) => {
+                  const pct = (rh.allocations[town.id] / total) * 100;
+                  return pct > 0 ? (
+                    <div key={town.id} title={`${town.name}: ${fmt$(rh.allocations[town.id])}`}
+                      style={{ width: `${pct}%`, background: TOWN_COLORS[i] }} />
+                  ) : null;
+                })}
+              </div>
+              <span style={{ fontSize: 11, color: '#16a34a', width: 60, textAlign: 'right', flexShrink: 0 }}>
+                {fmt$(rh.roundTotal)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Panel 3: The Twist */}
+      <div className="card debrief-panel" style={{ border: '2px solid #16a34a' }}>
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4, color: '#15803d' }}>The Twist: What Marketers Assume vs. Reality</h3>
+        <p style={{ fontSize: 14, color: '#374151', marginBottom: 14, lineHeight: 1.6 }}>
+          Most green marketers concentrate budgets in Democrat-leaning urban markets — because they assume
+          Republicans are hostile to environmental products. But is that assumption accurate?
+        </p>
+        <table className="twist-table" style={{ marginBottom: 14 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              <th style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'left' }}>Group</th>
+              <th style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center' }}>What marketers assume</th>
+              <th style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center' }}>Actual receptivity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', fontWeight: 600 }}>
+                <span style={{ color: '#2563eb' }}>■</span> Democrats
+              </td>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center', color: '#16a34a', fontWeight: 700 }}>75% ✓</td>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center', color: '#16a34a', fontWeight: 700 }}>75%</td>
+            </tr>
+            <tr style={{ background: '#fef9c3' }}>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', fontWeight: 600 }}>
+                <span style={{ color: '#dc2626' }}>■</span> Republicans
+              </td>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center', color: '#dc2626', fontWeight: 700 }}>~15% ✗</td>
+              <td style={{ padding: '10px 14px', border: '1px solid #e5e7eb', textAlign: 'center', color: '#ca8a04', fontWeight: 700, fontSize: 18 }}>65% 🎉</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 10 }}>
+          Republicans are considerably more receptive to environmental products than most Democrats assume.
+          They may be skeptical of climate <em>policy</em>, but they care deeply about practical
+          outcomes: saving money on energy bills, clean air and water for their families, locally-sourced
+          goods, and energy independence. This gap between assumption and reality is a textbook case of
+          <strong> pluralistic ignorance</strong> — a systematic misperception of what "the other side" actually believes.
+        </p>
+        <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7 }}>
+          In this game, Republican markets also have <strong>lower competition</strong> because most green brands
+          aren't marketing there. Every market pays the same $5 per converted customer — the only
+          thing that differs is how many receptive customers exist and how much competition eats into
+          your reach.
+        </p>
+      </div>
+
+      {/* Panel 4: ROI Breakdown */}
+      <div className="card debrief-panel">
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Market-by-Market Breakdown</h3>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>Sorted by Republican lean (most R → most D)</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th style={{ textAlign: 'center' }}>R/D Split</th>
+              <th style={{ textAlign: 'right' }}>Your Spent</th>
+              <th style={{ textAlign: 'right' }}>Your Revenue</th>
+              <th style={{ textAlign: 'right' }}>Your ROI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedByR.map(({ town, totalAlloc, totalPayout, avgROI }) => {
+              const cl = compLabel(town.competition);
+              return (
+                <tr key={town.id}>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{town.name}</div>
+                    <span className={`tag ${cl.cls}`} style={{ fontSize: 10 }}>{cl.label}</span>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <PartisanBar repSplit={town.repSplit} demSplit={town.demSplit} />
+                  </td>
+                  <td style={{ textAlign: 'right', fontSize: 13 }}>{totalAlloc > 0 ? fmtFull$(totalAlloc) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#15803d' }}>{totalPayout > 0 ? fmtFull$(totalPayout) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontSize: 13 }}>{avgROI > 0 ? avgROI.toFixed(2) + '×' : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Panel 5: Research */}
+      <div className="card debrief-panel" style={{ background: '#f0fdf4' }}>
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 12 }}>What the Research Shows</h3>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div>
+            <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 4 }}>
+              <strong>Americans dramatically underestimate bipartisan support for environmental protection.</strong>{' '}
+              A landmark 2022 study found that 66–80% of Americans support major climate policies,
+              but people estimate it's only 37–43% — a misperception of nearly half.
+            </p>
+            <p className="cite">
+              Sparkman et al. (2022). "Americans experience a false social reality by underestimating
+              popular climate policy support by nearly half." <em>Nature Communications.</em>{' '}
+              <a href="https://www.nature.com/articles/s41467-022-32412-y" target="_blank" style={{ color: '#15803d' }}>
+                nature.com/articles/s41467-022-32412-y
+              </a>
+            </p>
+          </div>
+          <div>
+            <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 4 }}>
+              <strong>Republican support for practical environmental measures is consistently underestimated.</strong>{' '}
+              Pew Research (2024) found that 75% of Republicans support tax credits for home energy efficiency,
+              and 69% support federal funding for carbon capture — numbers far higher than most Democrats would guess.
+            </p>
+            <p className="cite">
+              Pew Research Center (2024). "How Republicans view climate change and energy issues."{' '}
+              <a href="https://www.pewresearch.org/short-reads/2024/03/01/how-republicans-view-climate-change-and-energy-issues/" target="_blank" style={{ color: '#15803d' }}>
+                pewresearch.org
+              </a>
+            </p>
+          </div>
+          <div>
+            <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 4 }}>
+              <strong>The partisan gap in environmental concern is real, but far smaller than perceived.</strong>{' '}
+              Yale's Climate Change Communication program shows that even the most conservative US states
+              have 60%+ support for environmental protection — and the gap with liberal states is mostly
+              about <em>framing</em>, not underlying values.
+            </p>
+            <p className="cite">
+              Yale Program on Climate Change Communication.{' '}
+              <a href="https://climatecommunication.yale.edu/visualizations-data/partisan-maps/" target="_blank" style={{ color: '#15803d' }}>
+                climatecommunication.yale.edu
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ textAlign: 'center', paddingBottom: 40 }}>
+        <button className="btn-primary" style={{ fontSize: 16 }} onClick={() => dispatch({ type: 'RESTART' })}>
+          Play Again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+
+function App() {
+  const [state, dispatch] = useReducer(reducer, initialState);
+
+  switch (state.screen) {
+    case 'start':      return <StartScreen dispatch={dispatch} />;
+    case 'briefing':   return <BriefingScreen dispatch={dispatch} />;
+    case 'allocation': return <AllocationScreen state={state} dispatch={dispatch} />;
+    case 'results':    return <ResultsScreen state={state} dispatch={dispatch} />;
+    case 'debrief':    return <DebriefScreen state={state} dispatch={dispatch} />;
+    default: return null;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

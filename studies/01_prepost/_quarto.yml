@@ -1,0 +1,10 @@
+project:
+  type: default
+format:
+  html:
+    toc: true
+    number-sections: true
+    embed-resources: true
+  pdf:
+    toc: true
+bibliography: ../../lit/references.bib

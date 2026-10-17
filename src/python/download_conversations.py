@@ -72,9 +72,12 @@ def main():
     # Load participant IDs from Qualtrics data
     print("Loading participant data...")
     qualtrics_data = pd.read_parquet("data/raw/qualtrics.parquet")
+    data2 = pd.read_parquet("t3 experiment pilot/analysis_data.parquet")
 
     # Filter to completed responses
-    participant_ids = qualtrics_data[qualtrics_data['Status'] == 'IP Address']['ResponseId'].tolist()
+    participant_ids1 = qualtrics_data[qualtrics_data['Status'] == 'IP Address']['ResponseId'].tolist()
+    participant_ids2 = data2['ResponseId'].tolist()
+    participant_ids = set(participant_ids1) | set(participant_ids2)
     print(f"Found {len(participant_ids)} participants")
 
     # Create output directory for conversations

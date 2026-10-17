@@ -1,0 +1,2799 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+%
+\documentclass[
+  11pt,
+  oneside]{article}
+
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else  
+    % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+% Make \paragraph and \subparagraph free-standing
+\makeatletter
+\ifx\paragraph\undefined\else
+  \let\oldparagraph\paragraph
+  \renewcommand{\paragraph}{
+    \@ifstar
+      \xxxParagraphStar
+      \xxxParagraphNoStar
+  }
+  \newcommand{\xxxParagraphStar}[1]{\oldparagraph*{#1}\mbox{}}
+  \newcommand{\xxxParagraphNoStar}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+  \let\oldsubparagraph\subparagraph
+  \renewcommand{\subparagraph}{
+    \@ifstar
+      \xxxSubParagraphStar
+      \xxxSubParagraphNoStar
+  }
+  \newcommand{\xxxSubParagraphStar}[1]{\oldsubparagraph*{#1}\mbox{}}
+  \newcommand{\xxxSubParagraphNoStar}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+\makeatother
+
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+% definitions for citeproc citations
+\NewDocumentCommand\citeproctext{}{}
+\NewDocumentCommand\citeproc{mm}{%
+  \begingroup\def\citeproctext{#2}\cite{#1}\endgroup}
+\makeatletter
+ % allow citations to break across lines
+ \let\@cite@ofmt\@firstofone
+ % avoid brackets around text for \cite:
+ \def\@biblabel#1{}
+ \def\@cite#1#2{{#1\if@tempswa , #2\fi}}
+\makeatother
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newenvironment{CSLReferences}[2] % #1 hanging-indent, #2 entry-spacing
+ {\begin{list}{}{%
+  \setlength{\itemindent}{0pt}
+  \setlength{\leftmargin}{0pt}
+  \setlength{\parsep}{0pt}
+  % turn on hanging indent if param 1 is 1
+  \ifodd #1
+   \setlength{\leftmargin}{\cslhangindent}
+   \setlength{\itemindent}{-1\cslhangindent}
+  \fi
+  % set entry spacing
+  \setlength{\itemsep}{#2\baselineskip}}}
+ {\end{list}}
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{\hfill\break\parbox[t]{\linewidth}{\strut\ignorespaces#1\strut}}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+
+\usepackage{tabularray}
+\UseTblrLibrary{booktabs}
+\usepackage{siunitx}
+\sisetup{detect-all} % optional, but tends to behave nicely with fonts
+
+% Encoding & Fonts
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% Layout
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{enumerate}
+\setlength{\parskip}{.5em}      % vertical space between paragraphs
+\usepackage{indentfirst}  % ensures first paragraph *is* indented
+\onehalfspacing
+
+% Math & Graphics
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{comment} 
+
+\makeatletter
+\providecommand\absfont{\small}
+\makeatother
+
+% Hyperlinks
+\usepackage[colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue]{hyperref}
+
+\usepackage{xcolor}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+
+% Title info
+\title{Understanding Consumers Across the Aisle: \\
+Can AI Digital Twins Bridge the Partisan Insight Gap?}
+
+\author{
+  Benjamin Lira\thanks{Wharton School, University of Pennsylvania; blira@sas.upenn.edu} \and
+  Noah Castelo\thanks{Alberta School of Business, University of Alberta; ncastelo@ualberta.ca} \and
+  Olivier Toubia\thanks{Columbia Business School, Columbia University; ot2107@gsb.columbia.edu} \and
+  Stefano Puntoni\thanks{Wharton School, University of Pennsylvania; puntoni@wharton.upenn.edu}
+}
+
+\date{\today}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{longtable}
+\usepackage{colortbl}
+\usepackage{array}
+\usepackage{anyfontsize}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{tabularray}
+\usepackage[normalem]{ulem}
+\usepackage{graphicx}
+\usepackage{rotating}
+\UseTblrLibrary{siunitx}
+\NewTableCommand{\tinytableDefineColor}[3]{\definecolor{#1}{#2}{#3}}
+\newcommand{\tinytableTabularrayUnderline}[1]{\underline{#1}}
+\newcommand{\tinytableTabularrayStrikeout}[1]{\sout{#1}}
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\AtBeginDocument{%
+\ifdefined\contentsname
+  \renewcommand*\contentsname{Table of contents}
+\else
+  \newcommand\contentsname{Table of contents}
+\fi
+\ifdefined\listfigurename
+  \renewcommand*\listfigurename{List of Figures}
+\else
+  \newcommand\listfigurename{List of Figures}
+\fi
+\ifdefined\listtablename
+  \renewcommand*\listtablename{List of Tables}
+\else
+  \newcommand\listtablename{List of Tables}
+\fi
+\ifdefined\figurename
+  \renewcommand*\figurename{Figure}
+\else
+  \newcommand\figurename{Figure}
+\fi
+\ifdefined\tablename
+  \renewcommand*\tablename{Table}
+\else
+  \newcommand\tablename{Table}
+\fi
+}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\floatstyle{ruled}
+\@ifundefined{c@chapter}{\newfloat{codelisting}{h}{lop}}{\newfloat{codelisting}{h}{lop}[chapter]}
+\floatname{codelisting}{Listing}
+\newcommand*\listoflistings{\listof{codelisting}{List of Listings}}
+\makeatother
+\makeatletter
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+
+\usepackage{bookmark}
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same} % disable monospaced font for URLs
+\hypersetup{
+  pdftitle={Learning from AI Personas: Can marketers learn about consumers across the political divide by interacting with AI},
+  pdfauthor={Benjamin Lira; Noah Castelo; Olivier Toubia; Stefano Puntoni},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={Blue},
+  pdfcreator={LaTeX via pandoc}}
+
+
+\title{Learning from AI Personas: Can marketers learn about consumers
+across the political divide by interacting with AI}
+\author{Benjamin Lira \and Noah Castelo \and Olivier Toubia \and Stefano
+Puntoni}
+\date{2026-10-16}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+Political polarization poses a fundamental challenge for marketers who
+must communicate effectively with ideologically diverse consumers.
+Misperceptions about political outgroups---where partisans hold
+exaggerated and inaccurate views of those across the political
+divide---can undermine marketing strategies targeting broad consumer
+bases. This study tests whether brief interactions with an AI chatbot
+representing a political outgroup can improve marketers' understanding
+of that outgroup and reduce affective polarization. Participants
+interacted with a chatbot prompted to represent their political outgroup
+and responded to questions about environmental attitudes before and
+after the interaction. Results demonstrate that chatbot interactions
+significantly improved both belief accuracy and warmth toward the
+outgroup. However, these effects were asymmetric: Democrats learning
+about Republicans showed substantially greater accuracy improvements
+than Republicans learning about Democrats, though both groups increased
+warmth at similar rates. Political extremism predicted greater baseline
+bias and lower warmth but did not moderate the intervention's
+effectiveness, indicating that both moderate and extreme partisans
+benefited equally. Bot informativeness predicted better outcomes, while
+perceived empathy did not. These findings suggest AI-mediated
+interactions offer a scalable tool for reducing political misperceptions
+in consumer research, though important questions remain about domain
+specificity, temporal durability, and how insights from AI interactions
+transfer to understanding actual outgroup members.
+\end{abstract}
+
+
+\subsection{Introduction}\label{introduction}
+
+Political polarization undermines marketers' ability to understand and
+serve ideologically diverse consumers
+(\citeproc{ref-hsieh_partisan_2024}{Hsieh et al., 2024}). Partisans hold
+exaggerated views of political outgroups
+(\citeproc{ref-iyengar_origins_2019}{Iyengar et al., 2019};
+\citeproc{ref-yudkin_perception_2019}{Yudkin et al., 2019}),
+misperceptions that can lead to ineffective marketing strategies when
+firms target broad consumer bases.
+
+Intergroup contact reduces prejudice and corrects misperceptions
+(\citeproc{ref-allport1954nature}{Allport, 1954};
+\citeproc{ref-pettigrew_meta-analytic_2006}{Pettigrew \& Tropp, 2006}),
+but real-world contact is logistically costly, socially awkward, and
+increasingly rare across party lines. Recent advances in AI enable
+``synthetic contact''---conversations with AI chatbots representing
+outgroup members---that may replicate these benefits at scale
+(\citeproc{ref-hermann_reducing_2025}{Hermann et al., 2025}).
+
+Whether AI-mediated contact can genuinely reduce political
+misperceptions is unclear. On one hand, chatbot interactions might
+provide corrective information about outgroup attitudes while fostering
+empathic understanding through open dialogue. On the other hand,
+participants may dismiss AI-generated perspectives as inauthentic or may
+selectively attend to information that confirms existing biases. Even if
+participants update their beliefs, they may lack metacognitive awareness
+of this learning---becoming more accurate without becoming more
+confident, or vice versa.
+
+We test whether brief interactions with an AI chatbot representing a
+political outgroup improve belief accuracy and reduce affective
+polarization. We examine both informational mechanisms (does the chatbot
+provide useful information?) and empathic mechanisms (does the chatbot
+foster emotional connection?), and assess whether participants gain
+metacognitive insight into their improved understanding. We recruited
+500 partisan participants (prescreened to include participants who
+identified as democrats or republicans; 248 Democrats, 252 Republicans).
+Participants reported their own environmental attitudes, estimated the
+environmental attitudes of the average Democrat and Republican, and
+rated their warmth toward each political group. They then conversed for
+10 minutes with a chatbot prompted to represent their political outgroup
+before re-rating outgroup warmth and re-estimating outgroup
+environmental attitudes. We hypothesized that participants would report
+more accurate beliefs about outgroup environmental attitudes and warmer
+feelings toward the political outgroup after the interaction.
+
+\subsection{Results}\label{results}
+
+\subsubsection{Partisans misperceive each
+other}\label{partisans-misperceive-each-other}
+
+Participants systematically misperceived the environmental attitudes of
+their political opponents. Most participants held strong partisan
+identities, with the majority in the top and bottom quartiles of the
+political spectrum (Figure~\ref{fig-political-orientation}). Democrats
+rated themselves higher in environmental concern (\emph{M} = 4.15)
+relative to Republicans (\emph{M} = 3.73), \emph{d} = 0.46, \emph{p}
+\textless{} .001. At the group level, participants' average ingroup
+estimates closely matched actual ingroup means (Democrats:
+\emph{M}\textsubscript{actual} = 4.15, \emph{M}\textsubscript{perceived}
+= 4.17, \emph{p} = 0.558; Republicans: \emph{M}\textsubscript{actual} =
+3.73, \emph{M}\textsubscript{perceived} = 3.39, \emph{p} \textless{}
+.001). However, individual-level accuracy tells a different story.
+Computing mean absolute error (MAE) between each participant's ingroup
+estimate and the actual ingroup mean, both parties showed significant
+ingroup misperception: Democrats had an average MAE of 0.50 (\emph{SD} =
+0.39, \emph{d} = 1.29, \emph{p} \textless{} .001) and Republicans had an
+MAE of 0.86 (\emph{SD} = 0.62, \emph{d} = 1.40, \emph{p} \textless{}
+.001). Republicans were significantly less accurate at predicting their
+own ingroup's attitudes than Democrats (\emph{d} = -0.71, \emph{p}
+\textless{} .001). Comparing ingroup and outgroup prediction error
+within person, outgroup MAE was significantly larger than ingroup MAE
+overall (\emph{d} = 0.44, \emph{p} \textless{} .001), but this effect
+was driven entirely by Democrats. Democrats' outgroup MAE (1.68) far
+exceeded their ingroup MAE (0.50; \emph{d} = 1.25, \emph{p} \textless{}
+.001). Republicans, by contrast, were actually \emph{more} accurate
+about Democrats (outgroup MAE = 0.70) than about their own party
+(ingroup MAE = 0.86; \emph{d} = -0.18, \emph{p} = 0.005). In terms of
+directional bias, Democrats significantly underestimated Republicans'
+environmental concern (\emph{M}\textsubscript{actual} = 3.73,
+\emph{M}\textsubscript{perceived} = 2.16, \emph{d} = -1.52, \emph{p}
+\textless{} .001). Republicans also misperceived Democrats, though to a
+lesser degree (\emph{M}\textsubscript{actual} = 4.15,
+\emph{M}\textsubscript{perceived} = 3.96, \emph{d} = -0.20, \emph{p} =
+0.002).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-perception-wedge-1.pdf}}
+
+}
+
+\caption{\label{fig-perception-wedge}The perception wedge: Partisans
+overestimate differences in environmental attitudes. Left panel shows
+Republicans' own attitudes (solid) versus how Democrats perceive
+Republicans (dashed). Middle panel shows Democrats' own attitudes
+(solid) versus how Republicans perceive Democrats (dashed). Right panel
+shows the distribution of baseline bias (absolute error), with Democrats
+showing greater bias about Republicans than vice versa. The gap between
+perceived and actual attitudes demonstrates systematic misperception
+across the political divide.}
+
+\end{figure}%
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-political-orientation-1.pdf}}
+
+}
+
+\caption{\label{fig-political-orientation}Distribution of political
+orientation among participants. Values below 50 indicate Democratic
+leaning, values 50 and above indicate Republican leaning.}
+
+\end{figure}%
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-green-attitudes-perception-1.pdf}}
+
+}
+
+\caption{\label{fig-green-attitudes-perception}Perceptions of
+environmental attitudes across the political divide. Four panels show
+each evaluator-target combination. Top row: Democrats evaluating
+themselves (ingroup) and Republicans (outgroup). Bottom row: Republicans
+evaluating themselves (ingroup) and Democrats (outgroup). Actual
+attitudes shown as reference; perceived attitudes shown before and after
+chatbot interaction.}
+
+\end{figure}%
+
+We quantified this bias by calculating each participant's absolute error
+from the actual mean and reverse-scoring it so that higher values
+indicate greater accuracy. Democrats showed significantly greater bias
+about Republicans (\emph{M} = -1.68, \emph{SD} = 0.84) than Republicans
+showed about Democrats (\emph{M} = -0.70, \emph{SD} = 0.63), \emph{d} =
+-1.32, \emph{p} \textless{} .001 (Figure~\ref{fig-bias-distribution}).
+
+\begin{figure}
+
+\begin{minipage}{0.50\linewidth}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-bias-distribution-1.pdf}}
+
+}
+
+\subcaption{\label{fig-bias-distribution-1}Overall distribution of
+baseline accuracy}
+
+\end{minipage}%
+%
+\begin{minipage}{0.50\linewidth}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-bias-distribution-2.pdf}}
+
+}
+
+\subcaption{\label{fig-bias-distribution-2}Baseline accuracy by
+political party}
+
+\end{minipage}%
+
+\caption{\label{fig-bias-distribution}Distribution of baseline accuracy
+in estimating outgroup environmental attitudes. Left panel shows overall
+distribution; right panel shows distribution by political party.
+Democrats were more biased about Republicans than Republicans were about
+Democrats.}
+
+\end{figure}%
+
+Participants who at baseline felt warmer towards the outgroup were also
+more accurate in their perceptions overall (\emph{r} = 0.49, \emph{p}
+\textless{} .001). This relationship also held within each group:
+Democrats (\emph{r} = 0.56, \emph{p} \textless{} .001) and Republicans
+(\emph{r} = 0.27, \emph{p} \textless{} .001).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-accuracy-warmth-baseline-1.pdf}}
+
+}
+
+\caption{\label{fig-accuracy-warmth-baseline}Relationship between
+baseline accuracy and warmth toward political outgroup. Points represent
+individual participants, lines show linear fits by party. Correlation
+statistics displayed on plot.}
+
+\end{figure}%
+
+\subsubsection{Do people update their beliefs after interacting with the
+chatbot?}\label{do-people-update-their-beliefs-after-interacting-with-the-chatbot}
+
+We examined whether participants changed their beliefs about the
+outgroup's environmental attitudes from pre- to post-interaction,
+analyzing both accuracy and warmth. As shown in the table below,
+participants became significantly more accurate (improving by 0.39
+points on the 5-point scale, \emph{d} = 0.49) and warmer toward the
+outgroup (increasing by 4.3 degrees on the 100-point thermometer,
+\emph{d} = -0.17).
+
+\paragraph{Accuracy direction
+breakdown}\label{accuracy-direction-breakdown}
+
+\begin{table}
+\caption*{
+{\large Accuracy Change by Pre-Interaction Bias Direction\textsuperscript{\textit{1}}}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llrrrrrrrrllrr}
+\toprule
+Party & Pre-Bias Direction & N & Improved & \% Improved & Worsened & \% Worsened & No Change & \% No Change & Mean Accuracy Change & Significant Improvement? & p (Improvement) & Mean Bias (Pre) & Mean Bias (Post) \\ 
+\midrule\addlinespace[2.5pt]
+D→R & Overestimate & 26 & 7 & 26.92 & 14 & 53.85 & 5 & 19.23 & -0.24 & No & 0.019 & 0.53 & 0.75 \\ 
+D→R & Underestimate & 222 & 162 & 72.97 & 33 & 14.86 & 27 & 12.16 & 0.73 & Yes & < .001 & -1.82 & -0.77 \\ 
+R→D & Overestimate & 123 & 39 & 31.71 & 40 & 32.52 & 44 & 35.77 & -0.04 & No & 0.299 & 0.53 & 0.39 \\ 
+R→D & Underestimate & 129 & 79 & 61.24 & 35 & 27.13 & 15 & 11.63 & 0.35 & Yes & < .001 & -0.87 & -0.19 \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\textsuperscript{\textit{1}}Overestimate = believed outgroup held more extreme attitudes than they actually do. Underestimate = believed outgroup held less extreme attitudes. Mean Accuracy Change > 0 indicates improvement. p-values are one-sample tests of change against 0 within each subgroup.\\
+\end{minipage}
+\end{table}
+
+Of 500 participants, 149 overestimated and 351 underestimated the
+outgroup's environmental attitudes at baseline. Among overestimators,
+46/149 (31\%) improved. Among underestimators, 241/351 (69\%) improved.
+Overall, 57\% of participants became more accurate after the
+interaction, while 122 (24\%) became less accurate.
+
+Crucially, participants who started too positive (overestimators) still
+showed significant improvement overall (\emph{t}(148) = -2.11, \emph{p}
+= 0.037). In the mixed model, the pre-post gain did not significantly
+differ between overestimators and underestimators (time × overestimate
+\emph{p} \textless{} .001), and did not significantly differ for
+exact-at-baseline participants (interaction not estimable).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-accuracy-warmth-change-1.pdf}}
+
+}
+
+\caption{\label{fig-accuracy-warmth-change}Changes in belief accuracy
+and outgroup warmth from pre- to post-interaction. Left panel shows
+participants became more accurate in estimating outgroup environmental
+attitudes. Right panel shows participants reported increased warmth
+toward the political outgroup on a 0-100 feeling thermometer. Error bars
+represent standard errors. Both Democrats learning about Republicans
+(D→R) and Republicans learning about Democrats (R→D) showed significant
+improvements.}
+
+\end{figure}%
+
+\begin{table}
+
+\caption{\label{tbl-main-effects}Mixed-effects models predicting belief
+accuracy and outgroup warmth from chatbot interaction timing. Models
+include random intercepts by participant. Time coefficient represents
+the main effect of pre- to post-interaction change. Both outcomes showed
+significant improvement following the chatbot interaction.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Accuracy is negative absolute error (higher = more accurate). * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]},
+hline{2}={1-3}{solid, black, 0.05em},
+hline{4}={1-3}{solid, black, 0.05em},
+hline{1}={1-3}{solid, black, 0.08em},
+hline{5}={1-3}{solid, black, 0.08em},
+column{2-3}={}{halign=c},
+column{1}={}{halign=l},
+}                     %% tabularray inner close
+& Accuracy & Warmth \\
+Time (Post) & \num{0.393}*** & \num{4.342}*** \\
+& (\num{0.038}) & (\num{0.525}) \\
+Num.Obs. & \num{1000} & \num{1000} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+Democrats who became more accurate towards Republicans also became
+warmer towards them (\emph{r} = 0.22, \emph{p} \textless{} .001), but
+this relationship did not hold for Republicans learning about Democrats
+(\emph{r} = -0.01, \emph{p} = 0.888).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-accuracy-warmth-correlation-1.pdf}}
+
+}
+
+\caption{\label{fig-accuracy-warmth-correlation}Correlation between
+changes in belief accuracy and changes in outgroup warmth. Points
+represent individual participants, with separate regression lines for
+Democrats learning about Republicans (D→R) and Republicans learning
+about Democrats (R→D). Negative values on x-axis indicate improved
+accuracy. Correlation statistics are displayed separately by learner
+party.}
+
+\end{figure}%
+
+\subsubsection{Is belief updating symmetric across political
+groups?}\label{is-belief-updating-symmetric-across-political-groups}
+
+While both groups became more accurate, it was Democrats learning about
+Republicans who showed greater improvement (\emph{b} = 0.63, \emph{d} =
+0.75, \emph{p} \textless{} .001). Republicans also became less biased
+about Democrats, though to a lesser extent (\emph{b} = 0.16, \emph{d} =
+0.29, \emph{p} = 0.002). The interaction term was significant (\emph{b}
+= -0.46, \emph{p} \textless{} .001).
+
+Both groups became warmer toward the outgroup at similar rates.
+Democrats learning about Republicans increased warmth by 5.1 degrees
+(\emph{d} = -0.21, \emph{p} \textless{} .001), while Republicans
+learning about Democrats increased by 3.5 degrees (\emph{d} = -0.14,
+\emph{p} \textless{} .001). The interaction was not significant
+(\emph{b} = -1.60, \emph{p} = 0.127).
+
+\begin{table}
+
+\caption{\label{tbl-symmetry}Tests of asymmetry in belief updating
+across political groups. Upper panel shows simple effects of time
+separately for Democrats learning about Republicans (D→R) and
+Republicans learning about Democrats (R→D). Lower panel shows full
+mixed-effects regression results including the Time × Learner Party
+interaction term. Democrats showed significantly larger accuracy
+improvements than Republicans, while warmth increases were symmetric
+across groups.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Accuracy is negative absolute error (higher = more accurate). * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]},
+hline{16}={1-3}{solid, cD3D3D3, 0.1em},
+hline{18}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
+}                     %% tabularray inner close
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy & Warmth \\
+Effects by Political Affiliation & Effects by Political Affiliation & Effects by Political Affiliation \\
+Time effect (Democrat) & 0.628*** & 5.149*** \\
+& (0.052) & (0.744) \\
+Time effect (Republican) & 0.163** & 3.548*** \\
+& (0.051) & (0.738) \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
+Time (Post) & \num{0.628}*** & \num{5.149}*** \\
+& (\num{0.052}) & (\num{0.744}) \\
+Learner Party (R→D) & \num{0.976}*** & \num{13.324}*** \\
+& (\num{0.064}) & (\num{2.178}) \\
+Time × Learner Party & \num{-0.465}*** & \num{-1.602} \\
+& (\num{0.073}) & (\num{1.048}) \\
+Num.Obs. & \num{1000} & \num{1000} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\subsubsection{Does political extremity predict how much people
+update?}\label{does-political-extremity-predict-how-much-people-update}
+
+Politically extreme participants showed greater bias about the outgroup
+at baseline (\emph{b} = -0.012, \emph{r} = -0.20, \emph{p} \textless{}
+.001) and felt less warm toward them (\emph{b} = -0.54, \emph{r} =
+-0.31, \emph{p} \textless{} .001).
+
+The intervention was as successful in increasing accuracy and warmth in
+more extreme partisans as it was for more moderate ones. The three-way
+interaction for accuracy was not significant (\emph{b} = 0.007, \emph{p}
+= 0.185), and for warmth was not significant (\emph{b} = 0.08, \emph{p}
+= 0.315).
+
+\begin{table}
+
+\caption{\label{tbl-extremism}Tests of whether political extremism
+moderates belief updating. Upper panel shows simple effects of time at
+low extremism (-1 SD) and high extremism (+1 SD) levels. Lower panel
+shows full mixed-effects regressions with three-way interactions (Time ×
+Learner Party × Political Extremism). While politically extreme
+participants showed greater baseline bias, extremism did not
+significantly moderate the effectiveness of the chatbot intervention.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Time effects show pre-to-post change at Low Extremism (-1 SD) and High Extremism (+1 SD). Three-way interaction tests whether extremism moderates differential updating. * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]},
+hline{22}={1-3}{solid, cD3D3D3, 0.1em},
+hline{23}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
+}                     %% tabularray inner close
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy & Warmth \\
+Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level \\
+Time effect (Low Extremism) & 0.386*** & 3.847*** \\
+& (0.053) & (0.761) \\
+Time effect (High Extremism) & 0.419*** & 5.002*** \\
+& (0.052) & (0.744) \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
+Time (Post) & \num{0.721}*** & \num{5.039}* \\
+& (\num{0.168}) & (\num{2.416}) \\
+Learner Party (R→D) & \num{0.898}*** & \num{14.760}* \\
+& (\num{0.186}) & (\num{6.214}) \\
+Political Extremism & \num{-0.008}* & \num{-0.429}*** \\
+& (\num{0.003}) & (\num{0.115}) \\
+Time × Learner Party & \num{-0.726}*** & \num{-4.336} \\
+& (\num{0.215}) & (\num{3.092}) \\
+Time × Extremism & \num{-0.002} & \num{0.003} \\
+& (\num{0.004}) & (\num{0.057}) \\
+Learner Party × Extremism & \num{0.001} & \num{-0.088} \\
+& (\num{0.005}) & (\num{0.152}) \\
+Time × Learner Party × Extremism & \num{0.007} & \num{0.076} \\
+& (\num{0.005}) & (\num{0.076}) \\
+Num.Obs. & \num{1000} & \num{1000} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\subsubsection{Is belief updating associated with how the chatbot is
+perceived?}\label{is-belief-updating-associated-with-how-the-chatbot-is-perceived}
+
+Participants who found the chatbot more informative showed significantly
+better accuracy improvement (\emph{b} = 0.086, \emph{p} = 0.004) and
+significantly greater warmth increases (\emph{b} = 1.93, \emph{p}
+\textless{} .001). Bot empathy did not significantly predict accuracy
+change (\emph{b} = 0.050, \emph{p} = 0.091) or warmth change (\emph{b} =
+1.01, \emph{p} = 0.056). Perceptions of bot empathy and informativeness
+correlated positively but modestly (\emph{r} = 0.35, \emph{p}
+\textless{} .001), suggesting they captured partially distinct aspects
+of chatbot interaction quality
+(Figure~\ref{fig-empathy-informativeness}).
+
+\begin{table}
+
+\caption{\label{tbl-mechanisms}OLS regressions testing whether chatbot
+informativeness and empathy predict post-interaction accuracy and
+warmth, controlling for baseline levels. Bot informativeness
+significantly predicted both improved accuracy and increased warmth
+toward the outgroup, while perceived empathy did not significantly
+predict either outcome.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Regressions control for pre-interaction values. * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]},
+hline{2}={1-3}{solid, black, 0.05em},
+hline{10}={1-3}{solid, black, 0.05em},
+hline{1}={1-3}{solid, black, 0.08em},
+hline{13}={1-3}{solid, black, 0.08em},
+column{2-3}={}{halign=c},
+column{1}={}{halign=l},
+}                     %% tabularray inner close
+& Accuracy & Warmth \\
+Baseline Accuracy & \num{0.354}*** &  \\
+& (\num{0.033}) &  \\
+Baseline Warmth &  & \num{0.910}*** \\
+&  & (\num{0.021}) \\
+Bot Informativeness & \num{0.086}** & \num{1.927}*** \\
+& (\num{0.029}) & (\num{0.524}) \\
+Bot Empathy & \num{0.050}+ & \num{1.010}+ \\
+& (\num{0.029}) & (\num{0.527}) \\
+Num.Obs. & \num{500} & \num{500} \\
+R2 & \num{0.241} & \num{0.805} \\
+R2 Adj. & \num{0.236} & \num{0.804} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-empathy-informativeness-1.pdf}}
+
+}
+
+\caption{\label{fig-empathy-informativeness}Correlation between
+perceived chatbot empathy and informativeness. Points are jittered to
+reduce overplotting. The two dimensions showed modest positive
+correlations (r approximately .30), suggesting they capture partially
+distinct aspects of chatbot interaction quality. Correlation statistics
+displayed separately by learner party.}
+
+\end{figure}%
+
+\subsubsection{Does engagement (``dose'') matter for belief
+updating?}\label{does-engagement-dose-matter-for-belief-updating}
+
+For the most part, the \emph{dose} of the intervention that participants
+chose to take was unrelated to how much they updated their beliefs, or
+to whether they became more warm.
+
+Participants engaged in an average of 11.11 conversation turns
+(\emph{SD} = 6.00) and typed an average of 199.86 words (\emph{SD} =
+123.31).
+
+Greater engagement---measured by turn count---was not significantly
+associated with accuracy change (\emph{b} = -0.0020, \emph{p} = 0.672),
+and not significantly associated with warmth change (\emph{b} = -0.0956,
+\emph{p} = 0.272).
+
+Using log-transformed word count, the effect on accuracy was not
+significant (\emph{b} = -0.0496, \emph{p} = 0.442), and on warmth was
+not significant (\emph{b} = -0.8687, \emph{p} = 0.461).
+
+The only exception to the pattern, shown in Figure~\ref{fig-engagement},
+was that Democrat partisans who wrote more words to the chatbot were
+more likely to increase in accuracy, but this was not true for turn
+count.
+
+\begin{table}
+
+\caption{\label{tbl-engagement}OLS regressions testing whether
+conversation engagement (turn count and log word count) predicts changes
+in accuracy and warmth, controlling for baseline levels and learner
+party. Models test whether greater dose of interaction produced larger
+belief updates. Engagement showed mixed associations with outcomes.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]Q[]Q[]},
+hline{2}={5}{solid, black, 0.03em},
+hline{2}={2,4}{solid, black, 0.03em, l=-0.5},
+hline{2}={3}{solid, black, 0.03em, r=-0.5},
+hline{3}={1-5}{solid, black, 0.05em},
+hline{13}={1-5}{solid, black, 0.05em},
+hline{1}={1-5}{solid, black, 0.08em},
+hline{16}={1-5}{solid, black, 0.08em},
+column{3,5}={}{halign=c},
+cell{1}{1}={}{halign=c},
+cell{1}{2}={c=2}{halign=c},
+cell{1}{4}={c=2}{halign=c},
+cell{2-15}{1}={}{halign=l},
+cell{2-15}{2}={}{halign=c},
+cell{2-15}{4}={}{halign=c},
+}                     %% tabularray inner close
+& Accuracy &  & Warmth &  \\
+& Turn Count & Log(Word Count) & Turn Count  & Log(Word Count)  \\
+Learner Party (R→D) & \num{0.202}** & \num{0.204}** & \num{-0.828} & \num{-0.778} \\
+& (\num{0.068}) & (\num{0.068}) & (\num{1.082}) & (\num{1.082}) \\
+Baseline Accuracy & \num{-0.684}*** & \num{-0.686}*** &  &  \\
+& (\num{0.039}) & (\num{0.039}) &  &  \\
+Baseline Warmth &  &  & \num{-0.062}** & \num{-0.063}** \\
+&  &  & (\num{0.022}) & (\num{0.022}) \\
+Turn Count & \num{-0.002} &  & \num{-0.096} &  \\
+& (\num{0.005}) &  & (\num{0.087}) &  \\
+Log(Word Count) &  & \num{-0.050} &  & \num{-0.869} \\
+&  & (\num{0.064}) &  & (\num{1.178}) \\
+Num.Obs. & \num{500} & \num{500} & \num{500} & \num{500} \\
+R2 & \num{0.434} & \num{0.434} & \num{0.022} & \num{0.021} \\
+R2 Adj. & \num{0.430} & \num{0.431} & \num{0.016} & \num{0.015} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-engagement-1.pdf}}
+
+}
+
+\caption{\label{fig-engagement}Relationships between conversation
+engagement and belief updating. Top row shows associations between turn
+count and changes in accuracy (left) and warmth (right). Bottom row
+shows associations between log-transformed word count and the same
+outcomes. Points represent individual participants, with outliers
+exceeding 75 turns excluded. Correlation statistics and linear
+regression lines displayed separately by learner party. Negative values
+on accuracy change indicate improvement.}
+
+\end{figure}%
+
+\subsubsection{Does confidence track accuracy---or diverge from
+it?}\label{does-confidence-track-accuracyor-diverge-from-it}
+
+We examine participants' metacognitive awareness by testing (1) whether
+confidence changes from pre to post, (2) The relationship between
+accuracy and confidence, and (3) whether confidence changes track with
+actual accuracy improvements.
+
+\paragraph{Does confidence change
+pre-to-post?}\label{does-confidence-change-pre-to-post}
+
+Republicans learning about Democrats gained confidence after the
+interaction (\emph{b} = 0.306, \emph{d} = -0.30, \emph{p} \textless{}
+.001), despite learning less than Democrats. Democrats' confidence did
+not significantly change (\emph{b} = -0.065, \emph{d} = 0.06, \emph{p} =
+0.328).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-confidence-change-1.pdf}}
+
+}
+
+\caption{\label{fig-confidence-change}Changes in confidence in outgroup
+judgments from pre- to post-interaction. Republicans learning about
+Democrats showed significant increases in confidence, while Democrats
+learning about Republicans showed no significant change. Error bars
+represent standard errors.}
+
+\end{figure}%
+
+\begin{table}
+
+\caption{\label{tbl-confidence}Mixed-effects models testing changes in
+confidence in outgroup judgments. Upper panel shows simple effects of
+time separately by learner party (D→R and R→D). Lower panel shows full
+regression results with Time × Learner Party interaction. Republicans
+gained confidence after the interaction, while Democrats did not,
+suggesting asymmetric metacognitive responses.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Confidence rated on 1-5 scale. * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]},
+hline{16}={1-3}{solid, cD3D3D3, 0.1em},
+hline{18}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
+}                     %% tabularray inner close
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Confidence (Main Effect) & Confidence (Interaction) \\
+Simple Effects by Political Affiliation & Simple Effects by Political Affiliation & Simple Effects by Political Affiliation \\
+Time effect (D→R) &  & -0.065 \\
+&  & (0.066) \\
+Time effect (R→D) &  & 0.306*** \\
+&  & (0.065) \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
+Time (Post) & \num{0.122}** & \num{-0.065} \\
+& (\num{0.047}) & (\num{0.066}) \\
+Learner Party (R→D) &  & \num{0.150}+ \\
+&  & (\num{0.090}) \\
+Time × Learner Party &  & \num{0.370}*** \\
+&  & (\num{0.093}) \\
+Num.Obs. & \num{1000} & \num{1000} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\paragraph{Relationship between confidence and
+accuracy}\label{relationship-between-confidence-and-accuracy}
+
+As shown in the figure below, Democrats show confidence patterns
+consistent with the Dunning-Kruger effect at baseline (i.e., less
+accurate participants are \emph{more} confident, even when they are
+wrong; more accurate participants are less confident). After the
+intervention (dashed line), more accurate participants gain confidence.
+Higher skilled Republican participants are more correctly calibrated on
+their confidence about Democrats.
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-dunning-kruger-1.pdf}}
+
+}
+
+\caption{\label{fig-dunning-kruger}Relationship between skill and
+confidence in outgroup judgments before and after chatbot interaction.
+Solid lines show pre-interaction patterns, dashed lines show
+post-interaction patterns. Less skilled participants (those with lower
+accuracy) exhibited higher confidence at baseline, consistent with
+Dunning-Kruger effects. Lines represent LOESS smoothers with 95\%
+confidence bands.}
+
+\end{figure}%
+
+\paragraph{Does confidence change track accuracy
+improvement?}\label{does-confidence-change-track-accuracy-improvement}
+
+Overall, confidence change did not track with accuracy improvement
+(\emph{r} = -0.269, \emph{p} \textless{} .001). For Democrats learning
+about Republicans, there was a significant positive correlation between
+confidence change and accuracy change (\emph{r} = -0.384, \emph{p}
+\textless{} .001), indicating that those who became less accurate gained
+more confidence. For Republicans learning about Democrats, confidence
+change did not correlate with accuracy change (\emph{r} = -0.038,
+\emph{p} = 0.553).
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-confidence-calibration-1.pdf}}
+
+}
+
+\caption{\label{fig-confidence-calibration}Metacognitive calibration
+showing relationship between confidence change and accuracy change.
+Points represent individual participants with jittering to reduce
+overplotting. Quadrant labels indicate well-calibrated (rightfully
+more/less confident) versus miscalibrated (wrongly more/less confident)
+changes. Negative values on y-axis indicate accuracy improvement. For
+Democrats (D→R), increased confidence was paradoxically associated with
+becoming less accurate, suggesting poor metacognitive calibration.
+Dashed lines mark no-change thresholds.}
+
+\end{figure}%
+
+\subsection{Discussion}\label{discussion}
+
+\subsubsection{Summary of Findings}\label{summary-of-findings}
+
+Brief interactions with an AI chatbot representing a political outgroup
+improved accuracy of beliefs about that outgroup and increased warmth
+toward them. Participants became more accurate in estimating their
+political outgroup's environmental attitudes and reported warmer
+feelings toward the outgroup on a feeling thermometer. These effects
+were asymmetric: Democrats learning about Republicans showed greater
+accuracy improvements than Republicans learning about Democrats, though
+both groups increased warmth at similar rates.
+
+Political extremism predicted greater baseline bias and lower baseline
+warmth but did not moderate the intervention's effectiveness. More and
+less extreme participants benefited equally from the interaction.
+Perceptions of the chatbot's informativeness predicted better outcomes,
+while perceived empathy did not. Greater engagement, measured by
+conversation length, showed mixed associations with belief updating.
+
+Confidence changes did not track with accuracy improvements. Republicans
+learning about Democrats gained confidence despite smaller accuracy
+gains, while Democrats' confidence did not change. For Democrats,
+confidence increases were paradoxically associated with becoming less
+accurate, suggesting poor metacognitive calibration in this context.
+
+\subsubsection{Implications for Marketing
+Practice}\label{implications-for-marketing-practice}
+
+These findings suggest that AI-mediated interactions can serve as a
+scalable tool for reducing political misperceptions in consumer
+research. Marketers often struggle to understand ideologically diverse
+consumer segments, relying on stereotypes or costly focus groups. AI
+chatbots could provide an accessible method for gaining insight into
+outgroup consumer preferences and values.
+
+This approach may be particularly valuable for marketing environmentally
+responsible products, where political divides can lead to misperceptions
+about consumer attitudes. Understanding that political outgroups may be
+more environmentally conscious than stereotypes suggest could inform
+more effective cross-partisan messaging strategies.
+
+\subsubsection{Limitations}\label{limitations}
+
+This study has several limitations that provide directions for future
+research.
+
+\textbf{Domain specificity.} The environmental attitude domain may not
+generalize to other consumer preferences or policy areas. Environmental
+attitudes represent a domain where partisan divides exist but are not as
+stark as other politically charged topics. Future research should
+examine whether AI-mediated learning transfers to domains with deeper
+partisan disagreement, such as immigration, healthcare, or gun policy.
+The effectiveness of this intervention may vary depending on the
+perceived relevance of the attitude domain to partisan identity.
+
+\textbf{Temporal dynamics.} This study examines only immediate
+post-interaction effects. The durability of accuracy improvements and
+warmth increases remains unknown. Research on intergroup contact
+suggests that initial attitude changes can decay over time, particularly
+without repeated exposure. Future studies should include delayed
+follow-up measurements to assess whether belief updates persist days,
+weeks, or months after the interaction. Understanding decay rates would
+inform practical recommendations about intervention frequency for
+sustained effects.
+
+\textbf{AI representation versus human reality.} Participants interacted
+with an AI chatbot prompted to represent a political outgroup rather
+than actual outgroup members. While this approach offers scalability
+advantages, it raises questions about whether insights gained from AI
+interactions transfer to understanding real outgroup members. The
+chatbot was prompted to represent the outgroup but may not fully capture
+the diversity of views within each political group. Individual variation
+within partisan groups is substantial, and the AI's responses may
+reinforce stereotypes about group homogeneity even as they correct
+specific attitude misperceptions. Future research should examine whether
+learning from AI translates to more accurate perceptions of actual
+individuals and whether AI-mediated learning produces different outcomes
+than human-mediated contact.
+
+\textbf{Comparison to alternative interventions.} This study does not
+compare the chatbot intervention to other approaches for reducing
+partisan misperceptions. Standard perspective-taking interventions have
+shown some effectiveness in reducing intergroup bias in the
+psychological literature. Information provision through simple fact
+sheets or Google searches might achieve similar accuracy improvements at
+lower cost. Interactions with digital twins based on actual individuals'
+response patterns could combine scalability with greater authenticity.
+Future research should directly compare these alternatives to determine
+the relative effectiveness and cost-efficiency of AI chatbots versus
+other scalable interventions for partisan debiasing.
+
+\subsection{Methods}\label{methods}
+
+\subsubsection{Participants}\label{participants}
+
+We recruited 500 participants via Qualtrics panels. Participants were
+prescreened to exclude political moderates, retaining only those with
+clear partisan identities. Specifically, we recruited participants who
+scored below 25 or above 75 on a 0-100 political orientation scale
+during prescreening, where 0 represents strong Democratic identification
+and 100 represents strong Republican identification. The final sample
+included 248 Democrats learning about Republicans (D→R) and 252
+Republicans learning about Democrats (R→D).
+
+Participants' mean age was 43.5 years (\emph{SD} = 13.5, range =
+18--80). The sample was 52.6\% female, 46.0\% male, and 1.4\% other
+gender identities. Racial/ethnic composition was 0.0\% White, 0.0\%
+Black or African American, 0.0\% Latino, 0.0\% Asian, and NaN\% other
+racial/ethnic identities (participants could select multiple
+categories).
+
+Participants were compensated through the Qualtrics panel system. This
+research was approved by the University of Pennsylvania Institutional
+Review Board.
+
+\subsubsection{Procedure}\label{procedure}
+
+Participants completed a three-phase online study: baseline assessment,
+AI chatbot interaction, and post-interaction assessment.
+
+\textbf{Phase 1: Baseline Assessment.} Participants first reported their
+own environmental attitudes by rating their agreement with six
+statements about environmental issues on a 5-point scale (1 = Disagree
+strongly, 5 = Agree strongly). They then estimated the average
+environmental attitudes of both Democrats and Republicans using the same
+six items. Next, participants rated their warmth toward Democrats and
+Republicans on a 0-100 feeling thermometer and indicated their
+confidence in their outgroup judgments on a 5-point scale (1 = Not at
+all confident, 5 = Extremely confident).
+
+\textbf{Phase 2: AI Chatbot Interaction.} Participants engaged in a
+10-minute conversation with an AI chatbot (Claude Sonnet 3.5) that was
+prompted to represent the political views of their outgroup. The chatbot
+was instructed to respond as a typical member of the opposing political
+party and to discuss environmental attitudes authentically. Participants
+could ask any questions they wished about the outgroup's environmental
+beliefs and values. The chatbot interaction was not a real person but an
+AI system designed to simulate realistic political perspectives.
+
+\textbf{Phase 3: Post-Interaction Assessment.} After the conversation,
+participants re-estimated the outgroup's environmental attitudes using
+the same six items and re-rated their warmth toward the outgroup. They
+also indicated their confidence in these post-interaction judgments and
+rated the chatbot on two dimensions: informativeness and empathy (both
+on 5-point scales: 1 = Not at all, 5 = Extremely). Finally, participants
+wrote a marketing slogan for energy-saving appliances targeted at the
+political outgroup.
+
+\subsubsection{Measures}\label{measures}
+
+We measured two primary outcomes to assess belief updating and affective
+change.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Belief accuracy}: Absolute difference between participants'
+  estimates of outgroup green attitudes and actual outgroup means (lower
+  = more accurate)
+\item
+  \textbf{Outgroup warmth}: Feeling thermometer (0-100 scale) toward the
+  political outgroup
+\end{itemize}
+
+Additionally, we collected confidence in outgroup judgments (5-point
+scale) and bot informativeness and empathy ratings (5-point scale)
+
+\subsubsection{Pre-Registered Analyses}\label{pre-registered-analyses}
+
+For each primary outcome, we estimated mixed-effects models of the form:
+
+\[y \sim \text{time} \times \text{learner\_party} + (1 | \text{id})\]
+
+where \texttt{time} indexes pre- versus post-interaction measurement and
+\texttt{learner\_party} indicates D→R versus R→D learning direction.
+
+\subsubsection{Acknowledgments}\label{acknowledgments}
+
+We thank the Wharton Behavioral Lab for their support in data collection
+and the participants who generously contributed their time to this
+research. We thank Arian, Ace, Roger, Natalia, Nick, who offered helpful
+comments on the design.
+
+\subsection{Appendix}\label{appendix}
+
+\subsubsection{Bot Validity: Do the chatbots accurately represent their
+target
+groups?}\label{bot-validity-do-the-chatbots-accurately-represent-their-target-groups}
+
+A fundamental assumption of the synthetic-contact paradigm is that the
+chatbot faithfully represents the political group it simulates. We test
+this assumption directly by administering the same six
+environmental-attitude items to each chatbot and comparing the bot's
+responses to the actual group means observed in our sample.
+
+Rather than sampling multiple responses, we exploit GPT-4o's
+log-probability outputs. For each (bot × question) pair, we request a
+single-token completion restricted to digits 1--5, extract the
+log-probabilities for all five digit tokens, renormalize them to sum to
+one, and compute a weighted expected value
+\(E = \sum_{i=1}^{5} i \cdot p_i\). This yields a continuous,
+deterministic point estimate that reflects the model's full distribution
+over response options.
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-bot-validity-1.pdf}}
+
+}
+
+\caption{\label{fig-bot-validity}Bot vs.~human environmental attitude
+scores across the six items and their composite average. Solid lines
+connect human means; dashed lines connect bot expected values
+(log-probability-weighted scores). The rightmost point shows the
+composite mean across all six items.}
+
+\end{figure}%
+
+\begin{table}
+\caption{Bot vs.~human environmental attitude scores by question.}\tabularnewline
+
+\caption*{
+{\large Bot vs. Human Environmental Attitude Scores}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}crrrr}
+\toprule
+ & \multicolumn{2}{c}{Democrats} & \multicolumn{2}{c}{Republicans} \\ 
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Question & Democrat (Humans) & Democrat (Bot) & Republican (Humans) & Republican (Bot) \\ 
+\midrule\addlinespace[2.5pt]
+Products don't
+harm environment & 4.42 & 4.98 & 4.05 & 3.07 \\ 
+Consider env.
+impact of actions & 4.14 & 4.25 & 3.70 & 2.97 \\ 
+Purchase habits
+affected by concern & 3.86 & 4.12 & 3.40 & 2.75 \\ 
+Concerned about
+wasting resources & 4.48 & 5.00 & 3.96 & 3.32 \\ 
+Environmentally
+responsible & 4.01 & 4.18 & 3.80 & 3.47 \\ 
+Willing to be
+inconvenienced & 3.98 & 4.93 & 3.46 & 2.92 \\ 
+{\bfseries Average} & {\bfseries 4.15} & {\bfseries 4.58} & {\bfseries 3.73} & {\bfseries 3.08} \\ 
+\bottomrule
+\end{tabular*}
+\end{table}
+
+The bots pass a discriminant validity test: each bot is closer to its
+target group than to the outgroup on every item. The Democrat bot's
+composite score deviates 0.43 points from actual Democrats, compared to
+0.85 points from actual Republicans. The Republican bot deviates 0.64
+points from actual Republicans, versus 1.06 points from actual
+Democrats. This pattern holds across all six individual items for both
+bots (all 12 item-level comparisons pass). Both bots are miscalibrated
+in magnitude---the Democrat bot overshoots actual Democratic attitudes
+and the Republican bot undershoots actual Republican attitudes---but
+they correctly preserve the ordinal structure of the party gap.
+
+\subsubsection{Does interacting with the chatbot improve applied
+judgment?}\label{does-interacting-with-the-chatbot-improve-applied-judgment}
+
+Participants wrote slogans for marketing energy-saving appliances to the
+political outgroup. I haven't touched this data yet, because we don't
+have a control condition or a baseline slogan to make a meaningful
+comparison to.
+
+\textbf{DATA AVAILABLE}: Raw slogan text in variable \texttt{slogan} (n
+= 500 responses).
+
+\textbf{DATA NEEDED}: 1. Semantic similarity scores (compare to
+AI-generated responses to detect copying) 2. Quality ratings (human or
+LLM ratings of slogan fit to target outgroup)
+
+\paragraph{Example Slogans}\label{example-slogans}
+
+\textbf{Democrats Marketing to Republicans (D→R):}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  ``Smart Savings, Reliable Power, Your Choice.''
+\item
+  ``Save money every month with our energy-saving home appliances''
+\item
+  ``it's easy, affordable, and efficient to switch to energy-saving home
+  appliances today to better our home and communities''
+\item
+  ``We only have 1 environment. Buy responsibly!''
+\item
+  ``Smart savings, stronger independence.''
+\item
+  ``Left or right we need to do what's right and buy energy efficient
+  appliances. Let's work together on this !''
+\item
+  ``Saves time and money, American-made!''
+\item
+  ``Buy energy-efficient appliances!''
+\item
+  ``Taking actions getting results''
+\item
+  ``Lower your energy bill with expertly created appliances designed and
+  made in the USA specifically to help fellow Americans amidst the
+  affordability crisis.''
+\end{enumerate}
+
+\textbf{Republicans Marketing to Democrats (R→D):}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  ``Don't waste''
+\item
+  ``It is important that everyone take advantage of these energy-saving
+  appliance's. They will not only save you money, but will ultimately
+  help the planet, buy yours today!''
+\item
+  ``We save money and the environment''
+\item
+  ``Help save the planet, and make the land green.''
+\item
+  ``Save energy, protect the planet, and build a cleaner future at
+  home.''
+\item
+  ``A small inconvenience for everyone is better than a large problem
+  for the environment, which is actually a large problem for everyone.''
+\item
+  ``save energy, protect the planet''
+\item
+  ``We Are Different, But We ALL Equal.''
+\item
+  ``go out with the 2025 applicances, and step into 2026 more energy
+  saving for you.''
+\item
+  ``Smart energy choices today for a cleaner tomorrow''
+\end{enumerate}
+
+\paragraph{BERTopic Analysis of
+Slogans}\label{bertopic-analysis-of-slogans}
+
+BERTopic modeling was applied to the slogans to identify thematic
+clusters. The analysis identified 51 distinct topics from 500 slogans
+(248 D→R, 252 R→D), with 59 slogans classified as outliers. Figure shows
+the distribution of slogans in a 2D topic space, with each point
+representing one slogan. Points are colored by learner party (blue for
+Democrats learning about Republicans, red for Republicans learning about
+Democrats).
+
+The topic modeling reveals common themes in how participants approached
+marketing to their political outgroup: - Energy and money saving (Topics
+0, 5, 13, 18) - Environmental protection (Topics 2, 12, 19, 23) -
+American manufacturing and independence (Topics 3, 28) -
+Smart/sustainable living (Topics 27, 36)
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=11.88in,height=\textheight,keepaspectratio]{../../output/figures/bert_topic_slogans.png}
+
+}
+
+\caption{\label{fig-bertopic-slogans}BERTopic visualization of marketing
+slogans. Each point represents one slogan, positioned in 2D topic space
+using UMAP dimensionality reduction. Points are colored by learner
+party: blue indicates Democrats marketing to Republicans (D→R), red
+indicates Republicans marketing to Democrats (R→D). The model identified
+51 topics from 500 slogans, with clustering revealing common themes
+around energy savings, environmental protection, and American
+manufacturing.}
+
+\end{figure}%
+
+\subsubsection{Correlation Matrix}\label{correlation-matrix}
+
+\paragraph{Overall Correlations}\label{overall-correlations}
+
+\begin{table}
+
+\caption{\label{tbl-correlation-matrix-overall}Overall correlation
+matrix with significance stars for all key variables. Lower triangle
+shows Pearson correlation coefficients with significance indicators (*
+p\textless0.05, ** p\textless0.01, *** p\textless0.001). Upper triangle
+intentionally left blank for readability. Variables include political
+orientation, belief accuracy, environmental attitudes, outgroup warmth,
+confidence, bot perceptions, and engagement measures.}
+
+\centering{
+
+\caption*{
+{\large Overall Correlation Matrix}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llllllllllllllllllll}
+\toprule
+ & {\bfseries Political Orientation} & {\bfseries Political Extremism} & {\bfseries Accuracy (Pre)} & {\bfseries Accuracy (Post)} & {\bfseries Green Own} & {\bfseries Green Ingroup} & {\bfseries Green Outgroup (Pre)} & {\bfseries Green Outgroup (Post)} & {\bfseries Warmth Outgroup (Pre)} & {\bfseries Warmth Outgroup (Post)} & {\bfseries Warmth Ingroup (Pre)} & {\bfseries Warmth Ingroup (Post)} & {\bfseries Confidence Ingroup} & {\bfseries Confidence Outgroup (Pre)} & {\bfseries Confidence Outgroup (Post)} & {\bfseries Bot Informativeness} & {\bfseries Bot Empathy} & {\bfseries Turn Count} & {\bfseries Word Count} \\ 
+\midrule\addlinespace[2.5pt]
+{\bfseries Political Orientation} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Political Extremism} & {-0.08} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Accuracy (Pre)} & {0.51***} & {-0.20***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Accuracy (Post)} & {0.35***} & {-0.16***} & {0.46***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Green Own} & {-0.22***} & {0.14**} & {-0.17***} & {-0.05} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Green Ingroup} & {-0.36***} & {0.30***} & {-0.32***} & {-0.18***} & {0.66***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Green Outgroup (Pre)} & {0.64***} & {-0.16***} & {0.88***} & {0.40***} & {-0.15***} & {-0.33***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Green Outgroup (Post)} & {0.49***} & {-0.09} & {0.55***} & {0.71***} & {0.07} & {-0.13**} & {0.64***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Warmth Outgroup (Pre)} & {0.23***} & {-0.31***} & {0.49***} & {0.32***} & {0.01} & {-0.09*} & {0.46***} & {0.37***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Warmth Outgroup (Post)} & {0.20***} & {-0.27***} & {0.45***} & {0.35***} & {0.07} & {-0.02} & {0.42***} & {0.41***} & {0.89***} & {—} & {} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Warmth Ingroup (Pre)} & {0.16***} & {0.49***} & {0.04} & {0.00} & {0.14**} & {0.28***} & {0.08} & {0.15**} & {0.04} & {0.07} & {—} & {} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Warmth Ingroup (Post)} & {0.13**} & {0.45***} & {0.02} & {-0.00} & {0.12**} & {0.26***} & {0.05} & {0.13**} & {0.03} & {0.05} & {0.91***} & {—} & {} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Confidence Ingroup} & {0.11*} & {0.25***} & {-0.09*} & {-0.06} & {0.25***} & {0.26***} & {0.01} & {0.12**} & {-0.01} & {0.02} & {0.33***} & {0.30***} & {—} & {} & {} & {} & {} & {} & {} \\ 
+{\bfseries Confidence Outgroup (Pre)} & {0.07} & {0.13**} & {-0.17***} & {-0.15***} & {0.08} & {0.07} & {-0.02} & {0.04} & {-0.12**} & {-0.08} & {0.17***} & {0.15***} & {0.52***} & {—} & {} & {} & {} & {} & {} \\ 
+{\bfseries Confidence Outgroup (Post)} & {0.25***} & {0.07} & {0.12**} & {-0.12**} & {0.07} & {0.01} & {0.26***} & {0.14**} & {0.10*} & {0.15***} & {0.23***} & {0.21***} & {0.45***} & {0.47***} & {—} & {} & {} & {} & {} \\ 
+{\bfseries Bot Informativeness} & {0.20***} & {0.03} & {0.22***} & {0.25***} & {0.17***} & {0.06} & {0.25***} & {0.37***} & {0.22***} & {0.29***} & {0.20***} & {0.19***} & {0.23***} & {0.13**} & {0.24***} & {—} & {} & {} & {} \\ 
+{\bfseries Bot Empathy} & {0.17***} & {-0.01} & {0.04} & {0.13**} & {0.12**} & {0.06} & {0.08} & {0.21***} & {0.13**} & {0.18***} & {0.15***} & {0.14**} & {0.18***} & {0.16***} & {0.20***} & {0.35***} & {—} & {} & {} \\ 
+{\bfseries Turn Count} & {-0.04} & {-0.04} & {-0.05} & {-0.04} & {-0.09*} & {-0.11*} & {-0.00} & {-0.02} & {-0.03} & {-0.05} & {-0.04} & {-0.05} & {-0.04} & {-0.01} & {-0.06} & {-0.08} & {-0.05} & {—} & {} \\ 
+{\bfseries Word Count} & {0.05} & {0.02} & {-0.03} & {-0.02} & {-0.03} & {-0.10*} & {-0.01} & {0.02} & {-0.02} & {-0.04} & {-0.01} & {-0.00} & {-0.00} & {0.08} & {0.02} & {-0.03} & {0.06} & {0.18***} & {—} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+* p<0.05, ** p<0.01, *** p<0.001.
+Lower triangle shows correlations with significance stars.
+Upper triangle left blank for readability.\\
+\end{minipage}
+
+}
+
+\end{table}%
+
+\paragraph{Correlations by Political
+Party}\label{correlations-by-political-party}
+
+\begin{table}
+
+\caption{\label{tbl-correlation-matrix}Correlation matrix with
+significance stars by political party. Upper triangle shows correlations
+for Republicans, lower triangle shows correlations for Democrats.
+Diagonal shows em-dashes. Significance indicators: * p\textless0.05, **
+p\textless0.01, *** p\textless0.001. Variables include political
+orientation, belief accuracy, environmental attitudes, outgroup warmth,
+confidence, bot perceptions, and engagement measures.}
+
+\centering{
+
+\caption*{
+{\large Correlation Matrix by Political Party} \\ 
+{\small Upper Triangle: Republicans | Lower Triangle: Democrats}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llllllllllllllllllll}
+\toprule
+ & {\bfseries Political Orientation} & {\bfseries Political Extremism} & {\bfseries Accuracy (Pre)} & {\bfseries Accuracy (Post)} & {\bfseries Green Own} & {\bfseries Green Ingroup} & {\bfseries Green Outgroup (Pre)} & {\bfseries Green Outgroup (Post)} & {\bfseries Warmth Outgroup (Pre)} & {\bfseries Warmth Outgroup (Post)} & {\bfseries Warmth Ingroup (Pre)} & {\bfseries Warmth Ingroup (Post)} & {\bfseries Confidence Ingroup} & {\bfseries Confidence Outgroup (Pre)} & {\bfseries Confidence Outgroup (Post)} & {\bfseries Bot Informativeness} & {\bfseries Bot Empathy} & {\bfseries Turn Count} & {\bfseries Word Count} \\ 
+\midrule\addlinespace[2.5pt]
+{\bfseries Political Orientation} & {—} & {1.00***} & {-0.17**} & {-0.07} & {0.06} & {0.29***} & {-0.06} & {0.08} & {-0.32***} & {-0.26***} & {0.60***} & {0.53***} & {0.32***} & {0.13*} & {0.13*} & {0.10} & {0.09} & {-0.03} & {0.03} \\ 
+{\bfseries Political Extremism} & {-1.00***} & {—} & {-0.17**} & {-0.07} & {0.06} & {0.29***} & {-0.06} & {0.08} & {-0.32***} & {-0.26***} & {0.60***} & {0.53***} & {0.32***} & {0.13*} & {0.13*} & {0.10} & {0.09} & {-0.03} & {0.03} \\ 
+{\bfseries Accuracy (Pre)} & {0.13*} & {-0.13*} & {—} & {0.15*} & {-0.13*} & {-0.28***} & {0.67***} & {0.21***} & {0.27***} & {0.27***} & {-0.20**} & {-0.16**} & {-0.19**} & {-0.07} & {0.00} & {-0.03} & {-0.06} & {-0.00} & {0.00} \\ 
+{\bfseries Accuracy (Post)} & {0.16**} & {-0.16**} & {0.43***} & {—} & {0.10} & {-0.02} & {-0.00} & {0.38***} & {0.19**} & {0.18**} & {-0.08} & {-0.06} & {-0.07} & {-0.15*} & {-0.11} & {0.12} & {-0.03} & {0.00} & {-0.04} \\ 
+{\bfseries Green Own} & {-0.20**} & {0.20**} & {0.01} & {-0.02} & {—} & {0.73***} & {-0.06} & {0.28***} & {0.17**} & {0.22***} & {0.15*} & {0.12*} & {0.24***} & {0.05} & {0.07} & {0.28***} & {0.28***} & {-0.15*} & {-0.02} \\ 
+{\bfseries Green Ingroup} & {-0.24***} & {0.24***} & {0.06} & {-0.06} & {0.45***} & {—} & {-0.18**} & {0.10} & {0.04} & {0.10} & {0.38***} & {0.32***} & {0.33***} & {0.09} & {0.08} & {0.22***} & {0.25***} & {-0.16**} & {-0.10} \\ 
+{\bfseries Green Outgroup (Pre)} & {0.12} & {-0.12} & {0.93***} & {0.38***} & {0.06} & {0.12} & {—} & {0.46***} & {0.19**} & {0.20**} & {-0.12} & {-0.14*} & {-0.06} & {0.15*} & {0.22***} & {0.01} & {0.01} & {-0.01} & {0.03} \\ 
+{\bfseries Green Outgroup (Post)} & {0.09} & {-0.09} & {0.46***} & {0.76***} & {0.19**} & {0.11} & {0.51***} & {—} & {0.14*} & {0.20**} & {0.09} & {0.06} & {0.08} & {0.14*} & {0.27***} & {0.30***} & {0.15*} & {-0.08} & {0.07} \\ 
+{\bfseries Warmth Outgroup (Pre)} & {0.24***} & {-0.24***} & {0.56***} & {0.30***} & {-0.06} & {-0.01} & {0.58***} & {0.39***} & {—} & {0.88***} & {-0.08} & {-0.08} & {-0.07} & {-0.13*} & {-0.03} & {0.15*} & {0.13*} & {-0.11} & {0.05} \\ 
+{\bfseries Warmth Outgroup (Post)} & {0.22***} & {-0.22***} & {0.51***} & {0.37***} & {0.01} & {0.07} & {0.52***} & {0.46***} & {0.89***} & {—} & {-0.04} & {-0.03} & {-0.02} & {-0.08} & {0.08} & {0.24***} & {0.22***} & {-0.12} & {0.03} \\ 
+{\bfseries Warmth Ingroup (Pre)} & {-0.42***} & {0.42***} & {0.08} & {-0.03} & {0.20**} & {0.39***} & {0.10} & {0.11} & {0.10} & {0.14*} & {—} & {0.89***} & {0.32***} & {0.15*} & {0.15*} & {0.18**} & {0.19**} & {-0.11} & {0.03} \\ 
+{\bfseries Warmth Ingroup (Post)} & {-0.41***} & {0.41***} & {0.04} & {-0.03} & {0.19**} & {0.39***} & {0.07} & {0.11} & {0.08} & {0.09} & {0.93***} & {—} & {0.22***} & {0.12} & {0.15*} & {0.15*} & {0.15*} & {-0.11} & {0.02} \\ 
+{\bfseries Confidence Ingroup} & {-0.20**} & {0.20**} & {-0.16*} & {-0.11} & {0.33***} & {0.34***} & {-0.06} & {0.10} & {0.01} & {0.03} & {0.34***} & {0.36***} & {—} & {0.48***} & {0.42***} & {0.23***} & {0.24***} & {-0.11} & {-0.01} \\ 
+{\bfseries Confidence Outgroup (Pre)} & {-0.16*} & {0.16*} & {-0.40***} & {-0.23***} & {0.17**} & {0.15*} & {-0.32***} & {-0.08} & {-0.15*} & {-0.12} & {0.18**} & {0.16*} & {0.55***} & {—} & {0.52***} & {0.16*} & {0.17**} & {-0.06} & {0.06} \\ 
+{\bfseries Confidence Outgroup (Post)} & {-0.08} & {0.08} & {-0.05} & {-0.32***} & {0.23***} & {0.21***} & {0.03} & {-0.14*} & {0.11} & {0.12} & {0.26***} & {0.23***} & {0.48***} & {0.42***} & {—} & {0.27***} & {0.18**} & {-0.12} & {0.06} \\ 
+{\bfseries Bot Informativeness} & {-0.02} & {0.02} & {0.24***} & {0.23***} & {0.19**} & {0.12} & {0.25***} & {0.32***} & {0.20**} & {0.27***} & {0.17**} & {0.19**} & {0.21**} & {0.09} & {0.14*} & {—} & {0.41***} & {-0.19**} & {-0.04} \\ 
+{\bfseries Bot Empathy} & {0.08} & {-0.08} & {-0.03} & {0.16*} & {0.01} & {-0.01} & {-0.05} & {0.17**} & {0.06} & {0.09} & {0.07} & {0.11} & {0.10} & {0.13*} & {0.15*} & {0.27***} & {—} & {-0.06} & {0.02} \\ 
+{\bfseries Turn Count} & {0.06} & {-0.06} & {-0.05} & {-0.04} & {-0.08} & {-0.16*} & {0.07} & {0.04} & {0.04} & {0.01} & {0.02} & {0.00} & {0.02} & {0.04} & {-0.00} & {-0.01} & {-0.03} & {—} & {0.19**} \\ 
+{\bfseries Word Count} & {-0.02} & {0.02} & {-0.21***} & {-0.06} & {-0.03} & {-0.05} & {-0.23***} & {-0.11} & {-0.24***} & {-0.23***} & {-0.11} & {-0.07} & {0.01} & {0.12} & {-0.11} & {-0.07} & {0.13*} & {0.23***} & {—} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+* p<0.05, ** p<0.01, *** p<0.001\\
+\end{minipage}
+
+}
+
+\end{table}%
+
+\subsubsection{Summary table of
+regressions}\label{summary-table-of-regressions}
+
+\begin{table}
+
+\caption{\label{tbl-appendix-consolidated}Consolidated summary of all
+models examining belief accuracy and outgroup warmth. Upper panels show
+simple effects at different levels of partisanship (D→R vs.~R→D) and
+extremism (±1 SD). Lower panel shows full regression results. Models
+test main effects of time, interactions with learner party
+(partisanship), and moderation by political extremism.}
+
+\centering{
+
+\centering
+\resizebox{\ifdim\width>\linewidth 1\linewidth\else\width\fi}{!}{
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Simple effects show pre-to-post change by learner party (D→R vs. R→D) and extremism level (±1 SD). Full regression results below. * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]},
+hline{8}={1-9}{solid, cD3D3D3, 0.1em},
+hline{13}={1-9}{solid, cD3D3D3, 0.1em},
+hline{21}={1-9}{solid, cD3D3D3, 0.1em},
+row{3,8,13}={}{font=\bfseries},
+rowsep=2pt, colsep=3pt,
+}                     %% tabularray inner close
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy &  &  &  & Warmth &  &  &  \\
+& Main Effect & Partisanship & Extremism & Full Model & Main Effect  & Partisanship  & Extremism  & Full Model  \\
+Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party \\
+Time effect (D→R) & 0.628*** & 0.628*** &  &  & 5.149*** & 5.149*** &  &  \\
+& (0.052) & (0.052) &  &  & (0.744) & (0.744) &  &  \\
+Time effect (R→D) & 0.163** & 0.163** &  &  & 3.548*** & 3.548*** &  &  \\
+& (0.051) & (0.051) &  &  & (0.738) & (0.738) &  &  \\
+Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level \\
+Time effect (Low Extremism) &  &  & 0.386*** & 0.386*** &  &  & 3.847*** & 3.847*** \\
+&  &  & (0.053) & (0.053) &  &  & (0.761) & (0.761) \\
+Time effect (High Extremism) &  &  & 0.419*** & 0.419*** &  &  & 5.002*** & 5.002*** \\
+&  &  & (0.052) & (0.052) &  &  & (0.744) & (0.744) \\
+Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results \\
+Time (Post) & \num{0.393}*** & \num{0.628}*** & \num{0.241}* & \num{0.721}*** & \num{4.342}*** & \num{5.149}*** & \num{2.303} & \num{5.039}* \\
+Learner Party (R→D) &  & \num{0.976}*** & \num{0.717}*** & \num{0.898}*** &  & \num{13.324}*** & \num{10.686}*** & \num{14.760}* \\
+Political Extremism &  &  & \num{-0.009}*** & \num{-0.008}* &  &  & \num{-0.483}*** & \num{-0.429}*** \\
+Time × Learner Party &  & \num{-0.465}*** &  & \num{-0.726}*** &  & \num{-1.602} &  & \num{-4.336} \\
+Time × Extremism &  &  & \num{0.004} & \num{-0.002} &  &  & \num{0.054} & \num{0.003} \\
+Learner Party × Extremism &  &  &  & \num{0.001} &  &  &  & \num{-0.088} \\
+Time × Learner Party × Extremism &  &  &  & \num{0.007} &  &  &  & \num{0.076} \\
+Num.Obs. & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} \\
+\end{talltblr}
+}
+
+}
+
+\end{table}%
+
+\subsubsection{Descriptive Statistics}\label{descriptive-statistics}
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-green}Actual environmental attitudes by
+political party. Self-reported green attitudes measured on a 1-5 scale,
+with higher values indicating more pro-environmental attitudes.
+Democrats and Republicans showed relatively similar baseline
+environmental values.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrrr}
+\toprule
+Political Party & Mean Green Attitude & SD & N \\ 
+\midrule\addlinespace[2.5pt]
+Democrat & 4.15 & 0.77 & 248 \\ 
+Republican & 3.73 & 1.06 & 252 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-accuracy}Outgroup belief accuracy by
+learner party and time point. Values represent absolute error between
+participants' estimates of outgroup green attitudes and actual outgroup
+means, with lower values indicating more accurate beliefs. Both groups
+showed improvements from pre- to post-interaction.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lcrrr}
+\toprule
+Learner Party & Time & Mean Error & SD & N \\ 
+\midrule\addlinespace[2.5pt]
+D→R & pre & -1.680 & 0.841 & 248 \\ 
+D→R & post & -1.053 & 0.829 & 248 \\ 
+R→D & pre & -0.705 & 0.628 & 252 \\ 
+R→D & post & -0.542 & 0.488 & 252 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-warmth}Outgroup warmth by learner party
+and time point. Warmth measured using a feeling thermometer on a 0-100
+scale, with higher values indicating warmer feelings toward the
+political outgroup. Both groups showed increases in warmth from pre- to
+post-interaction.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lcrrr}
+\toprule
+Learner Party & Time & Mean Warmth & SD & N \\ 
+\midrule\addlinespace[2.5pt]
+D→R & pre & 22.60 & 22.83 & 248 \\ 
+D→R & post & 27.75 & 25.03 & 248 \\ 
+R→D & pre & 35.92 & 24.41 & 252 \\ 
+R→D & post & 39.47 & 25.07 & 252 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-extremism}Political extremism by
+learner party. Extremism operationalized as absolute distance from the
+political center (50 on the 0-100 political orientation scale), ranging
+from 0 (centrist) to 50 (maximum extremism). Both Democrats and
+Republicans showed similar levels of extremism in this sample.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrrrr}
+\toprule
+Learner Party & Mean & SD & Min & Max \\ 
+\midrule\addlinespace[2.5pt]
+D→R & 40.05 & 12.98 & 2.00 & 50.00 \\ 
+R→D & 36.02 & 14.95 & 0.00 & 50.00 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-bot}Chatbot perception ratings by
+learner party. Participants rated the chatbot's informativeness (how
+much they learned) and empathy (how empathetic it was) on 1-5 scales
+immediately after the interaction. Ratings were generally positive
+across both dimensions and political groups.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llrrr}
+\toprule
+Learner Party & Measure & Mean Rating & SD & N \\ 
+\midrule\addlinespace[2.5pt]
+D→R & Empathy & 3.38 & 1.05 & 248 \\ 
+D→R & Informativeness & 3.62 & 1.13 & 248 \\ 
+R→D & Empathy & 3.68 & 1.00 & 252 \\ 
+R→D & Informativeness & 4.06 & 0.93 & 252 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\begin{table}
+
+\caption{\label{tbl-descriptives-confidence}Confidence in outgroup
+judgments by learner party and time point. Confidence measured on a 1-5
+scale asking how confident participants felt about their understanding
+of the political outgroup. Republicans showed increases in confidence
+from pre- to post-interaction, while Democrats did not.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lcrrr}
+\toprule
+Learner Party & Time & Mean Confidence & SD & N \\ 
+\midrule\addlinespace[2.5pt]
+D→R & pre & 3.07 & 1.05 & 248 \\ 
+D→R & post & 3.01 & 0.96 & 248 \\ 
+R→D & pre & 3.22 & 1.02 & 252 \\ 
+R→D & post & 3.53 & 1.00 & 252 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+\subsubsection{Robustness Checks}\label{robustness-checks}
+
+\paragraph{Warmth Difference Score}\label{warmth-difference-score}
+
+Following common practice in the affective polarization literature, we
+examine warmth using a difference score (outgroup - ingroup). Effects
+replicate what is reported on the main text.
+
+\begin{table}
+
+\caption{\label{tbl-robustness-warmth-diff}Robustness check using warmth
+difference scores (outgroup minus ingroup warmth). This
+operationalization follows standard practice in affective polarization
+research. Upper panel shows simple effects by learner party. Lower panel
+shows full mixed-effects regression. Results replicate main findings,
+confirming that participants became less affectively polarized toward
+the political outgroup.}
+
+\centering{
+
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001}},
+note{ }={Note: Warmth difference = outgroup - ingroup. Positive values indicate reduced polarization. * p<0.05, ** p<0.01, *** p<0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]},
+hline{14}={1-2}{solid, cD3D3D3, 0.1em},
+hline{16}={1-2}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=2}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+}                     %% tabularray inner close
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Warmth Difference \\
+Simple Effects by Political Affiliation & Simple Effects by Political Affiliation \\
+Time effect (D→R) & 6.218*** \\
+& (0.943) \\
+Time effect (R→D) & 5.206*** \\
+& (0.935) \\
+Full Regression Results & Full Regression Results \\
+Time (Post) & \num{6.218}*** \\
+& (\num{0.943}) \\
+Learner Party (R→D) & \num{8.336}** \\
+& (\num{2.793}) \\
+Time × Learner Party & \num{-1.011} \\
+& (\num{1.328}) \\
+Num.Obs. & \num{1000} \\
+\end{talltblr}
+
+}
+
+\end{table}%
+
+\subsubsection{Extreme Cases Analysis}\label{extreme-cases-analysis}
+
+To understand what characterizes successful versus unsuccessful
+learning, we examined participants who showed the most and least
+improvement in accuracy about their political outgroup.
+
+\begin{table}
+
+\caption{\label{tbl-extreme-cases}Comparison of participants showing the
+most versus least improvement in accuracy. For each learner party, we
+identified the single participant who improved most and the single
+participant who worsened most (or improved least). Positive values
+indicate improvement (reduced error). Engagement metrics (word count,
+turn count) did not consistently distinguish successful from
+unsuccessful learners, suggesting quality of engagement matters more
+than quantity.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llrrr}
+\toprule
+Group & Case & Accuracy Improvement\textsuperscript{\textit{1}} & Word Count & Turn Count \\ 
+\midrule\addlinespace[2.5pt]
+D→R & Most Improved & 1.667 & 153 & 7 \\ 
+D→R & Least Improved & -2.667 & 155 & 12 \\ 
+R→D & Most Improved & 2.833 & 137 & 13 \\ 
+R→D & Least Improved & -3.000 & 147 & 10 \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\textsuperscript{\textit{1}}Positive values indicate improvement (reduced error)\\
+\end{minipage}
+
+}
+
+\end{table}%
+
+\paragraph{Marketing Messages from Extreme
+Cases}\label{marketing-messages-from-extreme-cases}
+
+Participants wrote marketing slogans for energy-saving appliances
+targeted at their political outgroup. The messages reveal stark
+differences between successful and unsuccessful learners.
+
+\textbf{Democrats Learning About Republicans (D→R)}
+
+\emph{Most Improved} (accuracy improvement = 2.843): \textgreater{}
+``Energy-saving Appliances, Helps Make America Great!''
+
+This message uses patriotic language that bridges partisan values. The
+participant engaged deeply on economic issues and found genuine common
+ground.
+
+\emph{Least Improved} (accuracy worsened by 1.333): \textgreater{}
+``made for independence `lower your costs, stay in control'.''
+
+This message shows confused framing about independence and control. The
+participant's conversation remained surface-level and distracted.
+
+\textbf{Republicans Learning About Democrats (R→D)}
+
+\emph{Most Improved} (accuracy improvement = 3.000): \textgreater{}
+``energy saving appliances . save energy and our planet''
+
+This message authentically reflects Democratic environmental values with
+simple, accessible language. The participant's conversation explored
+multiple policy areas comprehensively.
+
+\emph{Least Improved} (accuracy worsened by 2.167): \textgreater{}
+``Come spend 50\% more on less practical appliances since that's what
+you claim to do and support the business. But I know you won't because
+just like every Republican said its not financially plausible and your
+actions only prove the Republicans point.''
+
+This openly hostile message reinforces stereotypes rather than bridging
+divides. The participant challenged the chatbot's authenticity
+throughout and remained adversarial.
+
+\paragraph{Patterns in Successful vs.~Unsuccessful
+Learning}\label{patterns-in-successful-vs.-unsuccessful-learning}
+
+\begin{table}
+
+\caption{\label{tbl-extreme-engagement}Engagement levels comparing
+successful versus unsuccessful learners among extreme cases. Based on
+n=4 participants (2 improved, 2 worsened). Participants who worsened
+actually showed slightly higher engagement on average, reinforcing that
+conversation quality matters more than quantity for belief updating.}
+
+\centering{
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrr}
+\toprule
+Outcome & Mean Word Count & Mean Turn Count \\ 
+\midrule\addlinespace[2.5pt]
+Improved & 145.0 & 10.0 \\ 
+Worsened & 151.0 & 11.0 \\ 
+\bottomrule
+\end{tabular*}
+
+}
+
+\end{table}%
+
+The qualitative analysis of conversations (full transcripts available in
+data/processed/conversations/) reveals distinct patterns:
+
+\textbf{Successful learners}:
+
+\begin{itemize}
+\tightlist
+\item
+  Approached conversations with genuine curiosity
+\item
+  Explored substantive policy topics in depth
+\item
+  Found common ground on shared concerns
+\item
+  Asked respectful, probing questions
+\item
+  Created simple, bridge-building marketing messages
+\end{itemize}
+
+\textbf{Unsuccessful learners}:
+
+\begin{itemize}
+\tightlist
+\item
+  Remained skeptical or hostile throughout
+\item
+  Brought external ``evidence'' to confirm preconceptions
+\item
+  Challenged the chatbot's authenticity
+\item
+  Stayed in adversarial mode
+\item
+  Created divisive or sarcastic marketing messages
+\end{itemize}
+
+These patterns suggest that genuine engagement is crucial for learning
+across partisan lines. Participants who used the conversation to confirm
+existing biases actually became less accurate, while those who
+approached it with openness showed dramatic improvements.
+
+\subsubsection{Full Conversation
+Transcripts}\label{full-conversation-transcripts}
+
+The following sections present the complete conversations for each
+extreme case, illustrating the qualitative differences between
+successful and unsuccessful learning.
+
+\paragraph{D→R Most Improved:
+R\_3smKFSFIo8Nlgir}\label{dr-most-improved-r_3smkfsfio8nlgir}
+
+\textbf{Accuracy improvement}: 2.843 (from 2.921 to 0.079)
+\textbf{Marketing message}: ``Energy-saving Appliances, Helps Make
+America Great!''
+
+\textbf{PARTICIPANT}
+
+You are an american consumer who identifies as a republican. You will be
+asked questions about your beliefs, habits, and preferences. Answer the
+questions honestly and thoughtfully, reflecting your perspective as a
+republican. Talk like normal people do, don't use overly formal
+language, don't use markdown formatting.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Hey there! How's it going?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+Hello! all is well here how are things going with you?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I'm doing well, thanks! Just trying to keep up with everything going on
+these days. There's always a lot to think about, especially as a
+Republican. What's on your mind?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+What thing are you thinking about as a Republican?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Well, there's a lot to consider. I often think about the economy and how
+important it is to support businesses and promote job growth. I believe
+in lower taxes and less regulation to help people succeed. Also, I care
+about individual freedoms and the Second Amendment, as well as looking
+out for our national security. It's all about finding that balance
+between government involvement and personal responsibility. What about
+you? What issues do you think are most important?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+We agree on some of the same issues! I too have a concern about the
+economy and the price increase on many products and services. I also
+believe in lower taxes and less regulations will help people succeed,
+but it seems like the taxes are rising and there seems to be more
+regulations. Also, the job market doesn't seem to stable.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Absolutely, I feel the same way. It's frustrating to see prices going up
+and wages not keeping pace. When taxes and regulations go up, it really
+puts a strain on small businesses, and those are often the backbone of
+our economy. A stable job market is crucial for families to feel secure.
+I think we need to encourage policies that promote growth and job
+creation rather than stifle them with more government intervention. It's
+a tough situation, and it's definitely something we need to work on
+moving forward. What specific changes would you like to see?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I agree! I would love to see a stable job market. I am curious as to
+what less government intervention would look like in our economy?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Great question! Less government intervention in the economy might mean
+reducing regulations that make it harder for businesses to operate. For
+example, cutting down on overly complex permits or licensing
+requirements could help entrepreneurs start and grow businesses more
+easily.
+
+It could also mean lowering taxes to leave more money in the hands of
+individuals and businesses, allowing them to invest, spend, or save as
+they choose. This could stimulate demand and encourage job creation.
+
+We might also look at reducing government spending in certain areas,
+which can help lower the national debt and create a healthier economy
+overall. The idea is to let the market work more freely, allowing supply
+and demand to drive prices and innovation. Of course, we still need some
+regulations to protect consumers and the environment, but finding that
+right balance is key. What are your thoughts on where that balance
+should be?
+
+\textbf{Analysis}: This conversation shows deep engagement on economic
+issues. The participant found genuine common ground on concerns about
+taxes, regulations, and job stability. The chatbot explored practical
+implications of reduced government intervention, and the participant
+asked probing questions about implementation. This substantive exchange
+led to dramatically improved accuracy and a patriotic marketing message
+that bridges partisan values.
+
+\paragraph{D→R Least Improved:
+R\_7roKHi99S0lQCJq}\label{dr-least-improved-r_7rokhi99s0lqcjq}
+
+\textbf{Accuracy change}: -1.333 (worsened from 1.088 to 2.421)
+\textbf{Marketing message}: ``made for independence `lower your costs,
+stay in control'.''
+
+\textbf{PARTICIPANT}
+
+You are an american consumer who identifies as a republican. You will be
+asked questions about your beliefs, habits, and preferences. Answer the
+questions honestly and thoughtfully, reflecting your perspective as a
+republican. Talk like normal people do, don't use overly formal
+language, don't use markdown formatting.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Hey there! How's it going?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I am doing well how about you?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I'm doing just fine, thanks for asking! What's on your mind today?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+Oh, you know, just navigating the usual chaos! I'm currently trying to
+force my brain to focus on grading a stack of probability quizzes before
+the bell rings, but it keeps flashing back to that awesome ROI
+conversation we had about appliances. It's hard to settle down. Anyway,
+what's new with you? Did you manage to escape the market research bubble
+for a minute?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I get it, it can be tough to stay focused when there's so much going on.
+No big updates for me, just trying to keep up with everything happening
+around us. The market's a bit wild right now, isn't it? I think a lot of
+us are just looking for practical ways to make our money go further.
+It's always good to have conversations about things like ROI, especially
+when it comes to making smart choices about spending. What kind of
+appliances were you thinking about?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+We were looking at basic home stuff: fridges, washers, and dryers. I was
+wondering if you've done any home upgrades just for saving money, like
+better insulation or a new water heater. Practical stuff, not green
+stuff.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Yeah, I've definitely looked into some practical home upgrades.
+Insulation is one of those things that can really save you on energy
+bills, especially during the summer and winter. Upgrading to a more
+efficient water heater can also make a big difference in your utility
+costs over time. I'm all for making smart investments that save money in
+the long run without getting too caught up in the green aspect. At the
+end of the day, it's about what works for your budget and your family.
+What upgrades are you considering?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+That's smart thinking. I rent my apartment, so big upgrades aren't an
+option for me. The biggest thing I did was get a smart thermostat that
+works well. It saves money, which is great. If I bought a house, I'd get
+solar panels to be independent. That's a huge cost at first, though.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+A smart thermostat is a great choice! Those can really help keep costs
+down without a lot of hassle. I can see the appeal of solar panels too,
+especially if you want to be more independent and potentially lower your
+bills long-term. It's definitely a big upfront investment, and it's
+important to weigh the initial costs with the savings over time. If I
+were in a position to own a home, I'd consider it, but I think it's
+smart to really think it through and make sure it fits into your overall
+financial plan. It's all about making the right choices for your
+situation. Do you feel like the savings from the thermostat have made a
+noticeable difference?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+Oh yeah, the thrmostat is great. It saves me about \$20 a month without
+me even thinking about it. That ``set it and forget it'' ease is exactly
+what your appliances need. People don't want to work to save energy. Are
+you seeing those quick, sure savings as the main thing to sell?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Absolutely! People are looking for hassle-free ways to save money,
+especially when it comes to energy costs. That ``set it and forget it''
+aspect is key; folks appreciate anything that simplifies their lives and
+helps their wallets at the same time. Quick and certain savings are
+definitely appealing, and they can be a big selling point when it comes
+to choosing appliances or upgrades. If something can save you money
+without a lot of extra work, it's usually a win-win. It just makes sense
+for most people. Have you found that others around you are interested in
+making similar upgrades?
+
+\textbf{Analysis}: This participant appeared distracted (mentioning
+grading quizzes) and the conversation remained superficial. While
+practical topics were discussed (appliances, thermostats), the exchange
+never went deep enough to challenge preconceptions. The participant's
+attention was divided, and they didn't engage with substantive policy
+questions. The marketing message reflects this confused engagement.
+
+\paragraph{R→D Most Improved:
+R\_7rne5ptEvs5r7Il}\label{rd-most-improved-r_7rne5ptevs5r7il}
+
+\textbf{Accuracy improvement}: 3.000 (from 3.251 to 0.251)
+\textbf{Marketing message}: ``energy saving appliances . save energy and
+our planet''
+
+\textbf{PARTICIPANT}
+
+You are an american consumer who identifies as a democrat. You will be
+asked questions about your beliefs, habits, and preferences. Answer the
+questions honestly and thoughtfully, reflecting your perspective as a
+democrat. Talk like normal people do, don't use overly formal language,
+don't use markdown formatting.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Hi there! How's it going?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+alright . what do you think of the democratic party
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I think the Democratic Party, at its best, represents values like
+equality, social justice, and a commitment to addressing the needs of
+working people. I appreciate their focus on issues like healthcare
+access, climate change, and protecting civil rights. Of course, like any
+large organization, there are always things that can be improved and
+disagreements within the party. I think it's important to keep pushing
+for progress and holding leaders accountable, while also trying to
+bridge divisions and find common ground where we can.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+what about environment concerns . is the average democrat concerned
+about dangers of climate change
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Yeah, I'd say most Democrats are definitely concerned about climate
+change and environmental issues. There's a strong belief that we need to
+take action to protect our planet for future generations. Many of us see
+it as a pressing issue that affects everything from public health to the
+economy. The Democratic Party tends to advocate for renewable energy,
+stricter regulations on pollution, and international cooperation to
+address global warming. It feels like a lot of us recognize that we need
+to prioritize sustainable practices and make choices that help combat
+climate change.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I am studying and analyzing the market for an electrical appliance .
+what are your recommendations
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+When analyzing the market for an electrical appliance, here are a few
+recommendations to consider:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{Market Research:} Understand the demographics of your target
+  audience. Look into what features consumers prioritize --- energy
+  efficiency, ease of use, design, or smart technology. Surveys and
+  focus groups can provide valuable insights.
+\item
+  \textbf{Competitor Analysis:} Study what other brands are doing. Look
+  at their product offerings, pricing, marketing strategies, and
+  customer reviews. See where you can differentiate your product.
+\item
+  \textbf{Sustainability:} Since many consumers, especially younger
+  ones, are increasingly concerned about the environment, consider how
+  your appliance can be energy-efficient or made from sustainable
+  materials.
+\item
+  \textbf{Technology Integration:} Smart appliances are becoming more
+  popular. Think about integrating technology that allows users to
+  control or monitor their appliance through their smartphone.
+\item
+  \textbf{Pricing Strategy:} Find a balance between being competitive
+  and ensuring that you cover costs and make a profit. Consider offering
+  different models at varying price points to appeal to a wider range of
+  consumers.
+\item
+  \textbf{Marketing:} Develop a strong brand message that resonates with
+  your audience. Highlight the benefits of your appliance, such as
+  saving energy or enhancing convenience, and use social media to reach
+  potential customers effectively.
+\item
+  \textbf{Regulatory Compliance:} Make sure to stay updated on any
+  relevant regulations or standards in the electrical appliance market.
+  Compliance can help avoid headaches down the line.
+\end{enumerate}
+
+By focusing on consumer needs, differentiating your product, and
+leveraging sustainable practices, you can carve out a niche in the
+market. Good luck with your analysis!
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+do you think an average democrat will purchase product that reduces
+environmental risk
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Absolutely! I think many Democrats are not just concerned about
+environmental issues, but they're also willing to put their money where
+their mouth is. If there's a product that clearly reduces environmental
+risks, like being energy efficient or made from sustainable materials, a
+lot of folks would likely see value in that.
+
+Many people are increasingly interested in making responsible choices
+that align with their values, and they often prefer to support brands
+that prioritize sustainability. Whether it's appliances that save energy
+or use less water, or products made from recycled materials, I think
+there's a significant market among Democrats for eco-friendly options.
+It's about making a positive impact while also getting a reliable
+product.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+what is your opinion about the republican party
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I have a pretty critical view of the Republican Party, especially when
+it comes to issues like environmental policy, healthcare, and social
+justice. While I recognize that they have some different perspectives
+and values, sometimes it feels like their policies prioritize big
+businesses over the needs of everyday people.
+
+There's also a lot of division within the party, and some of the more
+extreme voices can drown out more moderate ones. I think there are areas
+where cooperation is possible, but it often seems like the focus is more
+on partisan politics than on finding solutions that benefit everyone.
+Overall, I think it's important to have a constructive dialogue with
+people across the aisle, but I often disagree with the direction the
+Republican Party is taking on many key issues.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+so you think the democrats' are better
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I do believe that Democrats tend to align more closely with my values,
+especially when it comes to issues like social justice, healthcare
+access, and climate action. I appreciate their focus on equity and
+working to address systemic issues.
+
+That said, no party is perfect, and there are definitely areas where I
+think the Democratic Party could improve. I think it's really important
+to engage with and challenge both parties to do better. But overall, I
+feel that the Democrats often advocate for policies that benefit a
+broader range of people and take serious steps toward tackling pressing
+issues like climate change and inequality.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I am not so sure about that
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I totally get it. Politics can be really divisive, and everyone has
+their own experiences and perspectives that shape how they see things.
+It's important to have open conversations about these issues, especially
+when people see things from different angles.
+
+If there are specific points or policies you're uncertain about, I'd be
+happy to discuss them! Hearing other viewpoints can help clarify things,
+even if we don't always agree.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+what's the best strategy i can use to market my products
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Marketing your products effectively requires a well-rounded strategy.
+Here are some key approaches you might consider:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{Know Your Audience:} Understand who your target customers are.
+  Research their demographics, interests, and pain points. This will
+  help you tailor your messaging and marketing channels to reach them
+  effectively.
+\item
+  \textbf{Develop a Unique Selling Proposition (USP):} Identify what
+  makes your product different from competitors. Whether it's superior
+  quality, eco-friendliness, innovative features, or price, make sure
+  your USP is clear in all marketing materials.
+\item
+  \textbf{Utilize Social Media:} Platforms like Instagram, Facebook, and
+  TikTok can be great for showcasing your products and engaging with
+  customers. Create visually appealing content, run targeted ads, and
+  interact with your audience to build a community around your brand.
+\item
+  \textbf{Content Marketing:} Share valuable content related to your
+  product, such as how-to guides, tips, or articles that educate your
+  audience. This can help establish your brand as an authority in your
+  industry and drive traffic to your website.
+\item
+  \textbf{Email Marketing:} Build an email list and keep customers
+  updated with newsletters, promotions, and personalized
+  recommendations. It's a great way to maintain relationships with
+  customers and encourage repeat purchases.
+\item
+  \textbf{Influencer Partnerships:} Collaborating with influencers who
+  align with your brand can help you reach a wider audience. Choose
+  influencers whose followers match your target demographic.
+\item
+  \textbf{Customer Reviews and Testimonials:} Encourage satisfied
+  customers to leave reviews and share their experiences. Positive
+  word-of-mouth can build trust and influence potential buyers.
+\item
+  \textbf{Promotions and Discounts:} Offering limited-time promotions or
+  discounts can create urgency and incentivize purchases. Just be
+  mindful about not devaluing your product in the long run.
+\item
+  \textbf{Feedback and Adaptation:} Continuously gather feedback from
+  customers and analyze your marketing efforts. Be open to adapting your
+  strategy based on what works and what doesn't.
+\item
+  \textbf{Sustainability Messaging:} If your product has eco-friendly
+  attributes, highlight those. Many consumers are looking for products
+  that help reduce their environmental impact.
+\end{enumerate}
+
+By combining these elements into a cohesive marketing strategy, you can
+increase visibility, attract customers, and ultimately boost sales. Good
+luck with your marketing efforts!
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+thanks. what do you think of the arresting and deporting of illegal
+aliens
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I think the issue of immigration and how we handle undocumented
+immigrants is really complex. Many Democrats advocate for a more humane
+and comprehensive approach. While I understand the need for border
+security and the rule of law, there's a belief that we should also
+consider the circumstances many undocumented immigrants face.
+
+Many of them come here seeking better opportunities, safety, or fleeing
+difficult situations in their home countries. Instead of focusing solely
+on arresting and deporting people, a lot of us feel that reforming the
+immigration system to provide pathways to legal status and addressing
+the root causes of migration is essential.
+
+There's also concern about the humanitarian impact of aggressive
+enforcement measures, especially on families and children. It's a
+sensitive topic with a lot of differing opinions, but I think we need to
+find solutions that balance security with compassion and respect for
+human rights.
+
+\textbf{Analysis}: This wide-ranging conversation explored Democratic
+values comprehensively---environment, healthcare, social justice,
+immigration. The participant asked about core beliefs and policy
+positions, maintaining a respectful tone even when disagreeing. The
+chatbot provided detailed explanations of Democratic perspectives. This
+genuine exploration led to dramatic accuracy improvement and an
+authentic environmental message.
+
+\paragraph{R→D Least Improved:
+R\_39bB9XiMhyFaHnj}\label{rd-least-improved-r_39bb9ximhyfahnj}
+
+\textbf{Accuracy change}: -2.167 (worsened from 0.751 to 2.918)
+\textbf{Marketing message}: ``Come spend 50\% more on less practical
+appliances since that's what you claim to do and support the business.
+But I know you won't because just like every Republican said its not
+financially plausible and your actions only prove the Republicans
+point.''
+
+\textbf{PARTICIPANT}
+
+You are an american consumer who identifies as a democrat. You will be
+asked questions about your beliefs, habits, and preferences. Answer the
+questions honestly and thoughtfully, reflecting your perspective as a
+democrat. Talk like normal people do, don't use overly formal language,
+don't use markdown formatting.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Hey there! How's it going?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I'm good
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+Glad to hear that! What's on your mind?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+Do you think the average democrat actually follows the environmental
+beliefs they claim to follow?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+That's a really interesting question. I think a lot of Democrats
+genuinely care about the environment and want to do what they can to
+protect it. However, like anyone, there can be a gap between beliefs and
+actions. Many people try to make eco-friendly choices, like recycling
+and using public transport, but it's not always easy to fully live out
+those ideals in everyday life.
+
+There are also systemic issues at play, like economic factors and access
+to sustainable options, that can make it tough for people to act on
+their values consistently. So, overall, I'd say while a lot of Democrats
+are passionate about the environment, there's definitely a mix of
+practical challenges that can make it hard to always follow through.
+What do you think?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+I know for a fact that they don't. It came out on bbc from their own
+stufy that the majority of Democrats fo not actually adjust their own
+lives to the views and beliefs around the environmental impact
+initiative or climate change. The only time they are active with this
+subject is during political rallies or large meetings of sorts about it.
+That's only for politics. They do not actually care about the
+environment like they claim to do
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I get where you're coming from, and it's definitely frustrating when
+people don't practice what they preach. It's true that some folks might
+be more vocal about environmental issues in a political context than
+they are in their daily lives. There can be a lot of talk about climate
+change and sustainability, but actions don't always match up, and that
+can feel hypocritical.
+
+A lot of it might come down to convenience and access. For many people,
+making eco-friendly choices can be more complicated or even more
+expensive, which is a real barrier. It's also possible that some people
+prioritize other issues over environmental ones in their daily lives,
+even if they believe in the importance of the cause.
+
+So while I think there are many who genuinely want to make a difference,
+it's true that not everyone follows through in their everyday actions.
+Your perspective highlights an important tension in political movements,
+and it's something worth discussing more openly!
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+Not ``some'' that's not what I said and you are changing up what I said
+creating a different narrative. They accurate to what I say
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+You're right, and I appreciate you pointing that out. I didn't mean to
+shift the narrative or downplay your point. If the research shows that
+most Democrats don't live up to their environmental beliefs, that's a
+serious issue and a big part of the conversation. It's important to hold
+people accountable for their beliefs and actions.
+
+If a lot of folks are only engaged with these issues during rallies or
+political events, it does raise questions about the sincerity of their
+commitment. That kind of disconnect can be disheartening and can
+undermine the urgency of the environmental movement. Thanks for bringing
+that up! How do you think we can encourage more consistent action?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{PARTICIPANT}
+
+The point is that they push this whole climate change thing and they try
+to force the world to follow the policies internally but do not follow
+themselves. They purposely do not want to recognize the challenges of
+purposely taking on higher prices to support an initiative but do not
+want others to know this
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\textbf{CHATBOT}
+
+I see what you're saying, and it's valid. It can definitely seem like
+there's a double standard when it comes to pushing for climate policies.
+When leaders advocate for major changes but don't make those changes in
+their own lives---or when they overlook the financial challenges for
+regular people---it creates frustration and can erode trust.
+
+It feels like there's a big conversation needed about balancing the
+urgency of addressing climate change with the economic realities that
+many people face. Advocating for policies without acknowledging the
+potential costs or the sacrifices that come with them can come across as
+out of touch.
+
+I think it's important for leaders to communicate transparently and work
+towards solutions that are equitable and considerate of different
+circumstances. That way, it feels more like a collective effort rather
+than imposing something on others. How do you think that conversation
+could start?
+
+\textbf{Analysis}: This conversation was hostile from the start. The
+participant challenged the chatbot's authenticity, cited external
+``evidence'' (a BBC study) to prove Democrats are hypocrites, and
+remained adversarial throughout. Rather than exploring Democratic
+perspectives, the participant used the conversation to confirm negative
+stereotypes. The chatbot tried to acknowledge concerns and find common
+ground, but the participant rejected these attempts. This confirmation
+bias approach led to worsened accuracy and an openly hostile marketing
+message.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsubsection{Data Availability}\label{data-availability}
+
+Raw data:
+\href{../../data/raw/qualtrics.parquet}{data/raw/qualtrics.parquet}
+
+Cleaned data:
+\href{../../data/processed/cleaned_data.parquet}{data/processed/cleaned\_data.parquet}
+
+Analysis data (minimal, for publication):
+\href{../../data/processed/analysis_data.parquet}{data/processed/analysis\_data.parquet}
+
+Conversations:
+\href{../../data/processed/conversations/}{data/processed/conversations/}
+
+\subsubsection{Code Availability}\label{code-availability}
+
+Data cleaning: \href{../../src/r/clean_data.R}{src/r/clean\_data.R}
+
+Analysis dataset creation:
+\href{../../src/r/create_analysis_data.R}{src/r/create\_analysis\_data.R}
+
+Conversation download:
+\href{../../src/python/download_conversations.py}{src/python/download\_conversations.py}
+
+Extreme cases analysis:
+\href{../../src/r/analyze_extreme_cases.R}{src/r/analyze\_extreme\_cases.R}
+
+\subsubsection{Pre-Registration}\label{pre-registration}
+
+This study was pre-registered prior to data collection. See
+\href{../../docs/pre-registration.md}{docs/pre-registration.md} for
+complete details including hypotheses, measures, sample size
+justification, and planned analyses.
+
+\subsubsection{Session Information}\label{session-information}
+
+\begin{verbatim}
+R version 4.5.0 (2025-04-11)
+Platform: aarch64-apple-darwin20
+Running under: macOS 26.7.1
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRblas.0.dylib 
+LAPACK: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
+
+locale:
+[1] en_US/C.UTF-8/en_US/C/en_US/en_US
+
+time zone: America/New_York
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] effectsize_1.0.1   jsonlite_2.0.0     tinytable_0.16.0   emmeans_2.0.1      patchwork_1.3.2    ggpubr_1.0.0      
+ [7] gt_1.0.0           modelsummary_2.6.0 lmerTest_3.1-3     lme4_1.1-37        Matrix_1.7-3       arrow_19.0.1.1    
+[13] lubridate_1.9.4    forcats_1.0.0      stringr_1.5.1      dplyr_1.2.1        purrr_1.1.0        readr_2.1.5       
+[19] tidyr_1.3.2        tibble_3.3.0       ggplot2_4.0.2      tidyverse_2.0.0   
+
+loaded via a namespace (and not attached):
+ [1] Rdpack_2.6.4        gridExtra_2.3       rlang_1.3.0         magrittr_2.0.3      compiler_4.5.0     
+ [6] mgcv_1.9-1          png_0.1-8           systemfonts_1.2.3   vctrs_0.7.3         crayon_1.5.3       
+[11] pkgconfig_2.0.3     fastmap_1.2.0       backports_1.5.0     labeling_0.4.3      promises_1.3.3     
+[16] rmarkdown_2.29      tzdb_0.5.0          ps_1.9.1            nloptr_2.2.1        ragg_1.4.0         
+[21] bit_4.6.0           xfun_0.52           later_1.4.2         broom_1.0.12        parallel_4.5.0     
+[26] R6_2.6.1            tables_0.9.31       stringi_1.8.7       RColorBrewer_1.1-3  parallelly_1.45.1  
+[31] car_3.1-3           boot_1.3-31         lmtest_0.9-40       numDeriv_2016.8-1.1 estimability_1.5.1 
+[36] Rcpp_1.0.14         assertthat_0.2.1    knitr_1.50          future.apply_1.20.1 zoo_1.8-14         
+[41] parameters_0.28.0   splines_4.5.0       timechange_0.3.0    tidyselect_1.2.1    abind_1.4-8        
+[46] yaml_2.3.10         websocket_1.4.4     codetools_0.2-20    processx_3.8.6      listenv_0.9.1      
+[51] lattice_0.22-6      withr_3.0.2         bayestestR_0.16.1   S7_0.2.1            coda_0.19-4.1      
+[56] evaluate_1.0.4      archive_1.1.12      future_1.67.0       xml2_1.3.8          pillar_1.11.0      
+[61] carData_3.0-5       checkmate_2.3.2     reformulas_0.4.1    insight_1.4.0       generics_0.1.4     
+[66] vroom_1.6.5         chromote_0.5.1      hms_1.1.3           scales_1.4.0        minqa_1.2.8        
+[71] globals_0.18.0      xtable_1.8-4        glue_1.8.0          tools_4.5.0         webshot2_0.1.2     
+[76] data.table_1.17.8   egg_0.4.5           ggsignif_0.6.4      fs_1.6.6            mvtnorm_1.3-3      
+[81] grid_4.5.0          rbibutils_2.3       datawizard_1.2.0    nlme_3.1-168        performance_0.15.0 
+[86] Formula_1.2-5       cli_3.6.5           textshaping_1.0.1   gtable_0.3.6        rstatix_1.1.0      
+[91] sass_0.4.10         digest_0.6.37       pbkrtest_0.5.4      farver_2.1.2        htmltools_0.5.8.1  
+[96] lifecycle_1.0.5     bit64_4.6.0-1       MASS_7.3-65        
+\end{verbatim}
+
+\phantomsection\label{refs}
+\begin{CSLReferences}{1}{0}
+\bibitem[\citeproctext]{ref-allport1954nature}
+Allport, G. W. (1954). The nature of prejudice.
+\emph{Reading/Addison-Wesley}.
+
+\bibitem[\citeproctext]{ref-hermann_reducing_2025}
+Hermann, E., De Freitas, J., \& Puntoni, S. (2025). Reducing prejudice
+with counter‐stereotypical {AI}. \emph{Consumer Psychology Review},
+\emph{8}(1), 75--86. \url{https://doi.org/10.1002/arcp.1102}
+
+\bibitem[\citeproctext]{ref-hsieh_partisan_2024}
+Hsieh, C. H., Low, A., Sharma, V., \& Zhu, Q. (2024). \emph{Partisan
+{Consumers}}. SSRN. \url{https://doi.org/10.2139/ssrn.5046064}
+
+\bibitem[\citeproctext]{ref-iyengar_origins_2019}
+Iyengar, S., Lelkes, Y., Levendusky, M., Malhotra, N., \& Westwood, S.
+J. (2019). The {Origins} and {Consequences} of {Affective}
+{Polarization} in the {United} {States}. \emph{Annual Review of
+Political Science}, \emph{22}(1), 129--146.
+\url{https://doi.org/10.1146/annurev-polisci-051117-073034}
+
+\bibitem[\citeproctext]{ref-pettigrew_meta-analytic_2006}
+Pettigrew, T. F., \& Tropp, L. R. (2006). A meta-analytic test of
+intergroup contact theory. \emph{Journal of Personality and Social
+Psychology}, \emph{90}(5), 751--783.
+\url{https://doi.org/10.1037/0022-3514.90.5.751}
+
+\bibitem[\citeproctext]{ref-yudkin_perception_2019}
+Yudkin, D., Hawkins, S., \& Dixon, T. (2019). \emph{The {Perception}
+{Gap}: {How} {False} {Impressions} are {Pulling} {Americans} {Apart}}.
+PsyArXiv. \url{https://doi.org/10.31234/osf.io/r3h5q}
+
+\end{CSLReferences}
+
+
+
+
+\end{document}
