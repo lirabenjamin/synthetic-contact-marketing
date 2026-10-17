@@ -30,8 +30,8 @@ dat <- raw %>%
   filter(
     Status == "IP Address",
     !is.na(PROLIFIC_PID),
-    PROLIFIC_PID != ""
-  )
+    PROLIFIC_PID != "",
+    PROLIFIC_PID != "{{%PROLIFIC_PID%}}"  )
 
 cat("After filtering: n =", nrow(dat), "\n")
 
@@ -225,7 +225,8 @@ dat <- dat %>%
     time_hidden_ms = as.numeric(timeHiddenMs),
     tab_switch_count_bot = as.numeric(tabSwitchCountBot),
     time_hidden_ms_bot = as.numeric(timeHiddenMsBot),
-    duration_sec = as.numeric(`Duration (in seconds)`)
+    duration_sec = as.numeric(`Duration (in seconds)`),
+    treatment = case_when(treatment_num == 1 ~ "Contact", treatment_num == 2 ~ "Chat",treatment_num == 3 ~ "Game", TRUE ~ NA_character_),
   )
 
 # --- 16. Select final variables ---
@@ -234,6 +235,7 @@ clean <- dat %>%
     # Identifiers
     ResponseId,
     PROLIFIC_PID,
+    sample_source,
 
     # Political
     participant_party,
@@ -241,6 +243,7 @@ clean <- dat %>%
     political_extremism,
 
     # Counterbalance
+    treatment,
     block,
     condition,
 
@@ -291,16 +294,28 @@ clean <- dat %>%
     comments
   )
 
+clean$treatment <- factor(clean$treatment, levels = c("Contact", "Chat", "Game"))
+
+clean2 = clean %>% filter(!is.na(sample_source))
+clean3 = clean %>% filter(sample_source == "pilot2")
+
 # --- 17. Save ---
 write_parquet(clean, "t2 new dv pilot/analysis_data.parquet")
 write.csv(clean, "t2 new dv pilot/analysis_data.csv", row.names = FALSE)
+write_parquet(clean, "t3 experiment pilot/analysis_data.parquet")
+write.csv(clean, "t3 experiment pilot/analysis_data.csv", row.names = FALSE)
+
+write_parquet(clean2, "t2 new dv pilot/analysis_data_Feb17.parquet")
+write.csv(clean2, "t2 new dv pilot/analysis_data_Feb17.csv", row.names = FALSE)
+
+write_parquet(clean3, "t3 experiment pilot/analysis_data_Feb17.parquet")
+write.csv(clean3, "t3 experiment pilot/analysis_data_Feb17.csv", row.names = FALSE)
+
 
 cat("\nCleaned data saved to t2 new dv pilot/\n")
 cat("Final sample size:", nrow(clean), "\n")
-cat("Variables:", ncol(clean), "\n")
 cat("\nBy party:\n")
 print(table(clean$learner_party))
-cat("\nBy block:\n")
-print(table(clean$block))
-cat("\nDonation summary:\n")
-print(summary(clean$donation))
+cat("\nBy condition:\n")
+print(table(clean$treatment))
+

@@ -1,0 +1,138 @@
+---
+title: "Study 3: Age-Based Outgroups"
+subtitle: "Misperception gap and twin prototypicality (continuous)"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(sandwich)
+library(lmtest)
+
+base_path <- here::here("studies/03_noah_age")
+fig_path  <- file.path(base_path, "output/figures")
+dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
+
+# Consistent with studies/02_experimental
+condition_colors <- c("Control" = "#BDBDBD", "GPT Persona" = "#67A9CF", "Digital Twin" = "#2166AC")
+PERCEIVED_COLOR  <- "#D73027"
+
+# Ground truth: Twin-2K-500 GREEN by age bracket (src/r/twin2k_age_ground_truth.R)
+gt <- read_csv(here::here("data/processed/ground_truth_twin2k.csv"), show_col_types = FALSE)
+SENIOR_TRUTH <- gt |> filter(type == "age", group == "65+") |> pull(M)
+
+likert <- c("Strongly disagree" = 1, "Somewhat disagree" = 2, "Neither agree nor disagree" = 3,
+            "Somewhat agree" = 4, "Strongly agree" = 5)
+```
+
+```{r data}
+raw <- read_csv(list.files(file.path(base_path, "data/raw"), full.names = TRUE), show_col_types = FALSE)[-(1:2), ]
+
+dat <- raw |>
+  filter(Finished == "True") |>
+  mutate(
+    across(green1:green6, ~ unname(likert[.x])),
+    green_estimate = rowMeans(pick(green1:green6)),
+    abs_error  = abs(green_estimate - SENIOR_TRUTH),
+    age        = as.numeric(age),
+    treatment  = factor(recode(condition, control = "Control", persona = "GPT Persona", twin = "Digital Twin"),
+                        levels = names(condition_colors)),
+    twin_green = as.numeric(green_score),
+    # Distance from the TRUE senior mean. Qualtrics' green_distance used 3.346 (the 18-29 mean) as reference.
+    twin_dist  = twin_green - SENIOR_TRUTH
+  ) |>
+  filter(is.na(age) | age < 65,   # seniors would be estimating their own group
+         !is.na(green_estimate))
+
+dat |> count(treatment)
+```
+
+Participants aged 65+ (n = `r sum(as.numeric(raw$age[raw$Finished == "True"]) >= 65, na.rm = TRUE)`) are excluded because they estimate their own group. Accuracy uses the Twin-2K-500 mean for respondents aged 65+ (M = `r round(SENIOR_TRUTH, 2)`, n = `r gt$n[gt$group == "65+"]`) as ground truth.
+
+# Misperception gap
+
+```{r gap}
+ctrl <- dat |> filter(treatment == "Control")
+gap_t <- t.test(ctrl$green_estimate, mu = SENIOR_TRUTH)
+pct_under <- mean(ctrl$green_estimate < SENIOR_TRUTH) * 100
+gap_t
+```
+
+Control participants estimate seniors' GREEN at M = `r round(mean(ctrl$green_estimate), 2)`, below the true senior mean of `r round(SENIOR_TRUTH, 2)` (*t*(`r gap_t$parameter`) = `r round(gap_t$statistic, 2)`, *p* `r format.pval(gap_t$p.value, digits = 2, eps = .001)`); `r round(pct_under)`% of control participants underestimate seniors. In the Twin-2K-500 data, seniors are the *most* pro-environmental age group.
+
+```{r fig-gap, fig.width = 8, fig.height = 4.5}
+gap_df <- bind_rows(
+  gt |> filter(type == "age") |>
+    transmute(label = paste0("Actual: ", group), M, lo = M - 1.96 * SE, hi = M + 1.96 * SE,
+              kind = if_else(group == "65+", "Actual seniors", "Actual other ages")),
+  tibble(label = "Perceived: seniors", M = mean(ctrl$green_estimate),
+         lo = gap_t$conf.int[1], hi = gap_t$conf.int[2], kind = "Perceived")
+) |> mutate(label = factor(label, levels = rev(c("Actual: 18-29", "Actual: 30-49", "Actual: 50-64",
+                                                  "Actual: 65+", "Perceived: seniors"))))
+
+p_gap <- ggplot(gap_df, aes(x = M, y = label, color = kind)) +
+  geom_vline(xintercept = SENIOR_TRUTH, linetype = "dashed", color = "grey60") +
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0, linewidth = 1.1) +
+  geom_point(size = 4.5) +
+  geom_label(aes(label = sprintf("%.2f", M)), nudge_y = 0.34, size = 4.5, fill = "white", label.size = 0, border.colour = NA, show.legend = FALSE) +
+  scale_color_manual(values = c("Actual seniors" = "#2166AC", "Actual other ages" = "grey65",
+                                "Perceived" = PERCEIVED_COLOR), guide = "none") +
+  labs(x = "Pro-environmental attitudes (GREEN, 1–5)", y = NULL,
+       title = "Seniors are greener than people think",
+       subtitle = "Actual: Twin-2K-500 panel. Perceived: control group.") +
+  theme_minimal(base_size = 15) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+        plot.title = element_text(face = "bold"), plot.subtitle = element_text(color = "grey40"))
+p_gap
+ggsave(file.path(fig_path, "age_misperception_gap.png"), p_gap, width = 8, height = 4.5, dpi = 300, bg = "white")
+```
+
+# Condition effects on accuracy
+
+```{r conditions}
+m_cond <- lm(abs_error ~ treatment, data = dat)
+coeftest(m_cond, vcov = vcovHC(m_cond, "HC3"))
+dat |> group_by(treatment) |> summarise(M_est = mean(green_estimate), M_abs_error = mean(abs_error), n = n())
+```
+
+# Twin prototypicality (continuous)
+
+Twins were randomly assigned, so a twin's distance from the senior mean is randomized. Standard errors are clustered by twin because `r dat |> filter(!is.na(twin_green)) |> count(chatbot_persona_id) |> filter(n > 1) |> nrow()` twins were assigned to more than one participant.
+
+```{r proto-models}
+tw <- dat |> filter(treatment == "Digital Twin", !is.na(twin_green))
+cl <- function(m) coeftest(m, vcov = vcovCL(m, cluster = ~ chatbot_persona_id))
+
+m_abs  <- lm(abs_error ~ abs(twin_dist), data = tw)        # atypicality hurts accuracy?
+m_quad <- lm(abs_error ~ twin_dist + I(twin_dist^2), data = tw)  # U-shape around the true mean
+m_anch <- lm(green_estimate ~ twin_green, data = tw)        # do estimates track the twin?
+cl(m_abs); cl(m_quad); cl(m_anch)
+```
+
+```{r fig-proto, fig.width = 8, fig.height = 5}
+ctrl_ci <- t.test(ctrl$abs_error)$conf.int
+p_proto <- ggplot(tw, aes(x = twin_dist, y = abs_error)) +
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = ctrl_ci[1], ymax = ctrl_ci[2], fill = "#BDBDBD", alpha = 0.35) +
+  annotate("text", x = min(tw$twin_dist), y = ctrl_ci[2], label = "Control (95% CI)",
+           hjust = 0, vjust = -0.5, color = "grey40", size = 4.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_jitter(width = 0.04, height = 0, alpha = 0.45, size = 2, color = "#2166AC") +
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2), color = "#2166AC", fill = "#2166AC", alpha = 0.15) +
+  labs(x = "Assigned twin's GREEN minus true senior mean\n(← less green than typical senior    more green →)",
+       y = "Participant's absolute error",
+       title = "Typical twins teach the most",
+       subtitle = "Each point is a participant in the twin condition; curve is a quadratic fit") +
+  theme_minimal(base_size = 15) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "grey40"))
+p_proto
+ggsave(file.path(fig_path, "twin_prototypicality_continuous.png"), p_proto, width = 8, height = 5, dpi = 300, bg = "white")
+```

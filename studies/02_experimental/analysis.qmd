@@ -1,0 +1,616 @@
+---
+title: "Study 2: Three-Condition Experiment"
+subtitle: "Digital Twin vs. GPT Persona vs. Control (Dogs)"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 3
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(arrow)
+library(emmeans)
+library(effectsize)
+library(gt)
+library(patchwork)
+
+# Paths
+base_path <- here::here("studies/02_experimental/")
+fig_path  <- file.path(base_path, "output/figures/")
+tab_path  <- file.path(base_path, "output/tables/")
+dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_path, recursive = TRUE, showWarnings = FALSE)
+
+# Ground truth Republican GREEN mean (from Twin-2K-500 dataset, N = 540 Republicans)
+GROUND_TRUTH_GREEN <- 3.18
+
+# Condition colors
+condition_colors <- c("Control" = "#BDBDBD", "GPT Persona" = "#67A9CF", "Digital Twin" = "#2166AC")
+
+# Helper functions
+pformat <- function(p, digits = 3) {
+  if (is.na(p)) return("NA")
+  threshold <- 10^(-digits)
+  if (p < threshold) paste0("< .", paste(rep("0", digits - 1), collapse = ""), "1")
+  else paste0("= ", sprintf(paste0("%.", digits, "f"), p))
+}
+
+numformat <- function(x, digits = 2) sprintf(paste0("%.", digits, "f"), x)
+
+p_to_stars <- function(p) {
+  ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", "n.s.")))
+}
+
+knitr::opts_chunk$set(dpi = 150)
+```
+
+# Data Cleaning
+
+```{r load-and-clean}
+# Load raw Qualtrics CSV (2 metadata rows after header)
+raw <- read_csv(file.path(base_path, "data/raw/qualtrics.csv"),
+                col_types = cols(.default = "c"),
+                show_col_types = FALSE) %>%
+  slice(-(1:2))
+
+cat("Raw rows:", nrow(raw), "\n")
+
+# Filter to completed responses with condition assignment
+dat <- raw %>%
+  filter(Status == "IP Address") %>%
+  filter(!is.na(condition) & condition != "")
+
+# Determine party
+dat <- dat %>%
+  mutate(
+    participant_party = case_when(
+      politicalorientation == "Closer to the Republican Party" ~ "Republican",
+      politicalorientation == "Closer to the Democratic Party" ~ "Democrat",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(participant_party))
+
+# Exclude Republicans (too few for analysis)
+n_rep <- sum(dat$participant_party == "Republican")
+cat("Excluding", n_rep, "Republicans.\n")
+dat <- dat %>% filter(participant_party == "Democrat")
+
+# Clean condition labels
+dat <- dat %>%
+  mutate(
+    treatment = factor(
+      case_when(
+        condition == "twin"    ~ "Digital Twin",
+        condition == "persona" ~ "GPT Persona",
+        condition == "control" ~ "Control",
+        TRUE ~ NA_character_
+      ),
+      levels = c("Control", "GPT Persona", "Digital Twin")
+    )
+  ) %>%
+  filter(!is.na(treatment))
+
+cat("Final N:", nrow(dat), "\n")
+cat("By condition:\n")
+print(table(dat$treatment))
+```
+
+```{r recode-green}
+# Post-treatment outgroup attitude estimates (green1-6): recode text → 1-5
+recode_likert5 <- function(x) {
+  case_when(
+    x %in% c("Strongly disagree", "13") ~ 1L,
+    x %in% c("Somewhat disagree", "14") ~ 2L,
+    x %in% c("Neither agree nor disagree", "15") ~ 3L,
+    x %in% c("Somewhat agree", "16") ~ 4L,
+    x %in% c("Strongly agree", "17") ~ 5L,
+    !is.na(suppressWarnings(as.integer(x))) ~ as.integer(x),
+    TRUE ~ NA_integer_
+  )
+}
+
+green_cols <- c("green1", "green2", "green3", "green4", "green5", "green6")
+dat <- dat %>% mutate(across(all_of(green_cols), recode_likert5))
+
+# Composite: mean of 6 items
+dat <- dat %>%
+  rowwise() %>%
+  mutate(green_estimate = mean(c(green1, green2, green3, green4, green5, green6), na.rm = TRUE)) %>%
+  ungroup()
+
+# Reliability
+green_alpha <- psych::alpha(dat %>% select(all_of(green_cols)), check.keys = TRUE)$total$std.alpha
+cat("GREEN scale α =", numformat(green_alpha), "\n")
+```
+
+```{r compute-dvs}
+# Primary DV: absolute estimation error (lower = more accurate)
+dat <- dat %>%
+  mutate(
+    abs_error = abs(green_estimate - GROUND_TRUTH_GREEN),
+    signed_error = green_estimate - GROUND_TRUTH_GREEN
+  )
+
+# Also compute item-level errors
+for (i in 1:6) {
+  col <- paste0("green", i)
+  dat[[paste0("abs_error_", i)]] <- abs(dat[[col]] - GROUND_TRUTH_GREEN)
+  dat[[paste0("signed_error_", i)]] <- dat[[col]] - GROUND_TRUTH_GREEN
+}
+
+cat("Absolute error: M =", numformat(mean(dat$abs_error, na.rm = TRUE)),
+    ", SD =", numformat(sd(dat$abs_error, na.rm = TRUE)), "\n")
+cat("Signed error: M =", numformat(mean(dat$signed_error, na.rm = TRUE)),
+    ", SD =", numformat(sd(dat$signed_error, na.rm = TRUE)), "\n")
+```
+
+```{r recode-persuasive}
+# Persuasiveness rating: recode text → 1-5
+dat <- dat %>%
+  mutate(
+    persuasive = case_when(
+      persuasive == "Not at all persuasive" ~ 1L,
+      persuasive == "Slightly persuasive" ~ 2L,
+      persuasive == "Moderately persuasive" ~ 3L,
+      persuasive == "Very persuasive" ~ 4L,
+      persuasive == "Extremely persuasive" ~ 5L,
+      !is.na(suppressWarnings(as.integer(persuasive))) ~ as.integer(persuasive),
+      TRUE ~ NA_integer_
+    )
+  )
+```
+
+```{r recode-demographics}
+# Demographics
+dat <- dat %>%
+  mutate(
+    age = as.numeric(age),
+    gender = case_when(
+      gender %in% c("Male", "1") ~ "Male",
+      gender %in% c("Female", "2") ~ "Female",
+      TRUE ~ "Other"
+    )
+  )
+
+# Party strength (Democrat identification slider)
+if ("Q41_2" %in% names(dat)) {
+  dat$party_strength <- as.numeric(dat$Q41_2)
+}
+
+# Chatbot engagement (from embedded data)
+dat$chatbot_turn_count <- as.numeric(dat$chatbot_turn_count)
+```
+
+```{r save-clean-data}
+write_parquet(dat, file.path(base_path, "data/processed/analysis_data.parquet"))
+write_csv(dat, file.path(base_path, "data/processed/analysis_data.csv"))
+```
+
+# Results
+
+## Sample
+
+```{r sample-stats}
+n_total <- nrow(dat)
+n_by_cond <- dat %>% count(treatment)
+n_control <- n_by_cond %>% filter(treatment == "Control") %>% pull(n)
+n_persona <- n_by_cond %>% filter(treatment == "GPT Persona") %>% pull(n)
+n_twin    <- n_by_cond %>% filter(treatment == "Digital Twin") %>% pull(n)
+mean_age   <- mean(dat$age, na.rm = TRUE)
+pct_female <- mean(dat$gender == "Female", na.rm = TRUE) * 100
+```
+
+*N* = `r n_total` Democrats completed the study (Control: *n* = `r n_control`; GPT Persona: *n* = `r n_persona`; Digital Twin: *n* = `r n_twin`; mean age = `r numformat(mean_age)`, `r numformat(pct_female, 0)`% female). `r n_rep` Republicans were excluded due to insufficient cell sizes.
+
+```{r sample-table}
+dat %>%
+  group_by(treatment) %>%
+  summarise(
+    N = n(),
+    `Mean Age` = mean(age, na.rm = TRUE) %>% numformat(),
+    `% Female` = (sum(gender == "Female", na.rm = TRUE) / n() * 100) %>% numformat(0),
+    `Party Strength (M)` = if ("party_strength" %in% names(cur_data()))
+      mean(party_strength, na.rm = TRUE) %>% numformat() else "—",
+    .groups = "drop"
+  ) %>%
+  gt() %>%
+  tab_header(title = "Sample Composition by Condition")
+```
+
+### Randomization check
+
+```{r balance-check}
+bal_age <- aov(age ~ treatment, data = dat)
+bal_age_p <- summary(bal_age)[[1]][["Pr(>F)"]][1]
+
+if ("party_strength" %in% names(dat) && any(!is.na(dat$party_strength))) {
+  bal_ps <- aov(party_strength ~ treatment, data = dat)
+  bal_ps_p <- summary(bal_ps)[[1]][["Pr(>F)"]][1]
+  ps_text <- paste0(" or party strength (*p* ", pformat(bal_ps_p), ")")
+} else {
+  ps_text <- ""
+}
+```
+
+Conditions did not differ significantly on age (*p* `r pformat(bal_age_p)`)`r ps_text`, supporting successful randomization.
+
+## Descriptive Statistics
+
+```{r descriptive-table}
+dat %>%
+  group_by(treatment) %>%
+  summarise(
+    N = n(),
+    `GREEN Estimate (M)` = numformat(mean(green_estimate, na.rm = TRUE)),
+    `GREEN Estimate (SD)` = numformat(sd(green_estimate, na.rm = TRUE)),
+    `Abs. Error (M)` = numformat(mean(abs_error, na.rm = TRUE)),
+    `Abs. Error (SD)` = numformat(sd(abs_error, na.rm = TRUE)),
+    `Signed Error (M)` = numformat(mean(signed_error, na.rm = TRUE)),
+    `Persuasive (M)` = numformat(mean(persuasive, na.rm = TRUE)),
+    `Persuasive (SD)` = numformat(sd(persuasive, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  gt() %>%
+  tab_header(title = "Descriptive Statistics by Condition",
+             subtitle = paste0("Ground truth Republican GREEN mean = ", GROUND_TRUTH_GREEN)) %>%
+  tab_footnote("Abs. Error = |estimate − ground truth|. Signed Error = estimate − ground truth (negative = underestimation).",
+               locations = cells_title())
+```
+
+## GREEN Estimation Accuracy
+
+Democrats systematically underestimated Republicans' environmental attitudes across all conditions.
+
+```{r signed-error-test}
+# Confirm directional bias: all conditions underestimate (signed error < 0)
+signed_by_cond <- dat %>%
+  group_by(treatment) %>%
+  summarise(
+    M = mean(signed_error, na.rm = TRUE),
+    t = t.test(signed_error, mu = 0)$statistic,
+    p = t.test(signed_error, mu = 0)$p.value,
+    .groups = "drop"
+  )
+
+signed_by_cond %>%
+  mutate(
+    M = numformat(M),
+    t = numformat(t),
+    p = map_chr(p, pformat)
+  ) %>%
+  gt() %>%
+  tab_header(title = "Directional Bias: Signed Error by Condition",
+             subtitle = "All negative = underestimating Republican green attitudes")
+```
+
+All signed errors were negative and significant (*p*s < .001), confirming false polarization: Democrats underestimated how environmentally conscious Republicans are.
+
+### Main analysis: Absolute error by condition
+
+```{r accuracy-anova}
+m_acc <- aov(abs_error ~ treatment, data = dat)
+acc_anova <- summary(m_acc)
+acc_F <- acc_anova[[1]][["F value"]][1]
+acc_p <- acc_anova[[1]][["Pr(>F)"]][1]
+acc_df1 <- acc_anova[[1]][["Df"]][1]
+acc_df2 <- acc_anova[[1]][["Df"]][2]
+
+# Effect size
+ss_treat <- acc_anova[[1]][["Sum Sq"]][1]
+ss_resid <- acc_anova[[1]][["Sum Sq"]][2]
+acc_eta2 <- ss_treat / (ss_treat + ss_resid)
+
+cat("ANOVA: F(", acc_df1, ",", acc_df2, ") =", numformat(acc_F),
+    ", p", pformat(acc_p), ", η² =", numformat(acc_eta2, 3), "\n")
+```
+
+A one-way ANOVA on absolute error revealed a `r if(acc_p < .05) "significant" else "non-significant"` effect of condition, *F*(`r acc_df1`, `r acc_df2`) = `r numformat(acc_F)`, *p* `r pformat(acc_p)`, η² = `r numformat(acc_eta2, 3)`.
+
+### Planned contrasts
+
+```{r accuracy-contrasts}
+emm_acc <- emmeans(m_acc, ~ treatment)
+
+# Planned contrasts (positive = first group has LARGER error = LESS accurate)
+acc_contrasts <- contrast(emm_acc, list(
+  `Control − Twin`    = c(1, 0, -1),
+  `Control − Persona` = c(1, -1, 0),
+  `Persona − Twin`    = c(0, 1, -1)
+)) %>% as_tibble()
+
+# Also pairwise with Cohen's d
+acc_pairs <- pairs(emm_acc) %>% as_tibble()
+rmse <- sqrt(ss_resid / acc_df2)
+
+acc_contrasts %>%
+  mutate(
+    `Cohen's d` = numformat(estimate / rmse),
+    Estimate = numformat(estimate),
+    SE = numformat(SE),
+    `t-ratio` = numformat(t.ratio),
+    `p-value` = map_chr(p.value, pformat)
+  ) %>%
+  select(Contrast = contrast, Estimate, SE, `t-ratio`, `p-value`, `Cohen's d`) %>%
+  gt() %>%
+  tab_header(title = "Planned Contrasts: Absolute Error") %>%
+  tab_footnote("Positive estimate = first condition has larger error (less accurate).",
+               locations = cells_title())
+```
+
+```{r accuracy-pairwise-details}
+# Extract specific contrasts for inline reporting
+ctrl_twin_b <- acc_contrasts %>% filter(contrast == "Control − Twin") %>% pull(estimate)
+ctrl_twin_t <- acc_contrasts %>% filter(contrast == "Control − Twin") %>% pull(t.ratio)
+ctrl_twin_p <- acc_contrasts %>% filter(contrast == "Control − Twin") %>% pull(p.value)
+ctrl_twin_d <- ctrl_twin_b / rmse
+
+ctrl_pers_b <- acc_contrasts %>% filter(contrast == "Control − Persona") %>% pull(estimate)
+ctrl_pers_t <- acc_contrasts %>% filter(contrast == "Control − Persona") %>% pull(t.ratio)
+ctrl_pers_p <- acc_contrasts %>% filter(contrast == "Control − Persona") %>% pull(p.value)
+ctrl_pers_d <- ctrl_pers_b / rmse
+
+pers_twin_b <- acc_contrasts %>% filter(contrast == "Persona − Twin") %>% pull(estimate)
+pers_twin_t <- acc_contrasts %>% filter(contrast == "Persona − Twin") %>% pull(t.ratio)
+pers_twin_p <- acc_contrasts %>% filter(contrast == "Persona − Twin") %>% pull(p.value)
+pers_twin_d <- pers_twin_b / rmse
+
+# Cell means for inline
+ctrl_M <- mean(dat$abs_error[dat$treatment == "Control"], na.rm = TRUE)
+ctrl_SD <- sd(dat$abs_error[dat$treatment == "Control"], na.rm = TRUE)
+pers_M <- mean(dat$abs_error[dat$treatment == "GPT Persona"], na.rm = TRUE)
+pers_SD <- sd(dat$abs_error[dat$treatment == "GPT Persona"], na.rm = TRUE)
+twin_M <- mean(dat$abs_error[dat$treatment == "Digital Twin"], na.rm = TRUE)
+twin_SD <- sd(dat$abs_error[dat$treatment == "Digital Twin"], na.rm = TRUE)
+```
+
+Both chatbot conditions produced more accurate estimates than the control condition (Control *M* = `r numformat(ctrl_M)`, *SD* = `r numformat(ctrl_SD)`; GPT Persona *M* = `r numformat(pers_M)`, *SD* = `r numformat(pers_SD)`: *t* = `r numformat(ctrl_pers_t)`, *p* `r pformat(ctrl_pers_p)`, *d* = `r numformat(ctrl_pers_d)`; Digital Twin *M* = `r numformat(twin_M)`, *SD* = `r numformat(twin_SD)`: *t* = `r numformat(ctrl_twin_t)`, *p* `r pformat(ctrl_twin_p)`, *d* = `r numformat(ctrl_twin_d)`). The two chatbot conditions `r if(pers_twin_p < .05) "differed significantly" else "did not differ significantly"` from each other (*t* = `r numformat(pers_twin_t)`, *p* `r pformat(pers_twin_p)`, *d* = `r numformat(pers_twin_d)`).
+
+### Figure 1: GREEN estimates by condition
+
+```{r fig-green-estimates}
+#| fig-cap: "Mean Republican GREEN score estimates by condition. Error bars = 95% CI. Dashed red line = ground truth Republican mean."
+#| fig-width: 7
+#| fig-height: 5
+
+emm_ci <- as_tibble(summary(emm_acc, level = 0.95))
+# EMMs are on abs_error; for the estimate plot, use green_estimate
+emm_est <- emmeans(lm(green_estimate ~ treatment, data = dat), ~ treatment)
+emm_est_ci <- as_tibble(summary(emm_est, level = 0.95))
+
+p1 <- ggplot(emm_est_ci, aes(x = treatment, y = emmean, fill = treatment)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15, linewidth = 0.6) +
+  geom_hline(yintercept = GROUND_TRUTH_GREEN, linetype = "dashed", color = "#D73027", linewidth = 0.8) +
+  annotate("text", x = 3.4, y = GROUND_TRUTH_GREEN + 0.05,
+           label = paste0("Ground truth = ", GROUND_TRUTH_GREEN),
+           color = "#D73027", hjust = 1, size = 3.5) +
+  scale_fill_manual(values = condition_colors, guide = "none") +
+  scale_y_continuous(limits = c(0, 5), breaks = 1:5) +
+  labs(x = "Condition", y = "Mean Republican GREEN Estimate (1–5)",
+       title = "Republican Environmental Attitude Estimates by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.major.x = element_blank())
+
+p1
+ggsave(file.path(fig_path, "green_estimates_by_condition.png"), p1, width = 7, height = 5, dpi = 300)
+```
+
+### Figure 2: Absolute error by condition
+
+```{r fig-abs-error}
+#| fig-cap: "Mean absolute estimation error by condition (lower = more accurate). Error bars = 95% CI."
+#| fig-width: 7
+#| fig-height: 5
+
+emm_ci <- as_tibble(summary(emm_acc, level = 0.95))
+
+p2 <- ggplot(emm_ci, aes(x = treatment, y = emmean, fill = treatment)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15, linewidth = 0.6) +
+  scale_fill_manual(values = condition_colors, guide = "none") +
+  labs(x = "Condition", y = "Absolute Error (lower = more accurate)",
+       title = "GREEN Scale Estimation Error by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.major.x = element_blank())
+
+p2
+ggsave(file.path(fig_path, "abs_error_by_condition.png"), p2, width = 7, height = 5, dpi = 300)
+```
+
+### Item-level accuracy
+
+```{r item-level}
+#| fig-cap: "Item-level absolute error by condition. Lower = more accurate."
+#| fig-width: 10
+#| fig-height: 6
+
+item_labels <- c(
+  "Products don't harm environment",
+  "Environmental impact of decisions",
+  "Purchase habits & environment",
+  "Wasting planet resources",
+  "Environmentally responsible",
+  "Willing to be inconvenienced"
+)
+
+item_long <- dat %>%
+  select(ResponseId, treatment, starts_with("abs_error_")) %>%
+  pivot_longer(starts_with("abs_error_"), names_to = "item", values_to = "abs_error") %>%
+  mutate(item = factor(item, levels = paste0("abs_error_", 1:6), labels = item_labels))
+
+item_means <- item_long %>%
+  group_by(treatment, item) %>%
+  summarise(M = mean(abs_error, na.rm = TRUE),
+            SE = sd(abs_error, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop")
+
+p_items <- ggplot(item_means, aes(x = item, y = M, fill = treatment)) +
+  geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
+  geom_errorbar(aes(ymin = M - SE, ymax = M + SE),
+                position = position_dodge(0.8), width = 0.25) +
+  scale_fill_manual(values = condition_colors, name = "Condition") +
+  labs(x = NULL, y = "Absolute Error (lower = more accurate)",
+       title = "Item-Level Estimation Error by Condition") +
+  coord_flip() +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+p_items
+ggsave(file.path(fig_path, "item_accuracy_by_condition.png"), p_items, width = 10, height = 6, dpi = 300)
+```
+
+## Ad Persuasiveness
+
+```{r persuasive-analysis}
+m_pers <- aov(persuasive ~ treatment, data = dat %>% filter(!is.na(persuasive)))
+pers_anova <- summary(m_pers)
+pers_F <- pers_anova[[1]][["F value"]][1]
+pers_p <- pers_anova[[1]][["Pr(>F)"]][1]
+pers_df1 <- pers_anova[[1]][["Df"]][1]
+pers_df2 <- pers_anova[[1]][["Df"]][2]
+pers_eta2 <- pers_anova[[1]][["Sum Sq"]][1] / sum(pers_anova[[1]][["Sum Sq"]])
+
+emm_pers <- emmeans(m_pers, ~ treatment)
+pers_contrasts <- contrast(emm_pers, list(
+  `Control − Twin`    = c(1, 0, -1),
+  `Control − Persona` = c(1, -1, 0),
+  `Persona − Twin`    = c(0, 1, -1)
+)) %>% as_tibble()
+
+pers_rmse <- sqrt(pers_anova[[1]][["Sum Sq"]][2] / pers_df2)
+
+pers_contrasts %>%
+  mutate(
+    `Cohen's d` = numformat(estimate / pers_rmse),
+    Estimate = numformat(estimate),
+    SE = numformat(SE),
+    `t-ratio` = numformat(t.ratio),
+    `p-value` = map_chr(p.value, pformat)
+  ) %>%
+  select(Contrast = contrast, Estimate, SE, `t-ratio`, `p-value`, `Cohen's d`) %>%
+  gt() %>%
+  tab_header(title = "Planned Contrasts: Ad Persuasiveness") %>%
+  tab_footnote("Negative estimate = first condition rated ad as LESS persuasive for Republicans.",
+               locations = cells_title())
+```
+
+```{r persuasive-inline}
+ctrl_pers_M <- mean(dat$persuasive[dat$treatment == "Control"], na.rm = TRUE)
+ctrl_pers_SD <- sd(dat$persuasive[dat$treatment == "Control"], na.rm = TRUE)
+twin_pers_M <- mean(dat$persuasive[dat$treatment == "Digital Twin"], na.rm = TRUE)
+twin_pers_SD <- sd(dat$persuasive[dat$treatment == "Digital Twin"], na.rm = TRUE)
+pers_pers_M <- mean(dat$persuasive[dat$treatment == "GPT Persona"], na.rm = TRUE)
+pers_pers_SD <- sd(dat$persuasive[dat$treatment == "GPT Persona"], na.rm = TRUE)
+
+ct_pers <- pers_contrasts %>% filter(contrast == "Control − Twin")
+cp_pers <- pers_contrasts %>% filter(contrast == "Control − Persona")
+```
+
+Participants in all conditions predicted that Republicans would find the eco-friendly ad relatively unpersuasive (all *M*s < 3 on a 1–5 scale). A one-way ANOVA revealed a `r if(pers_p < .05) "significant" else "non-significant"` effect of condition, *F*(`r pers_df1`, `r pers_df2`) = `r numformat(pers_F)`, *p* `r pformat(pers_p)`, η² = `r numformat(pers_eta2, 3)`. The Digital Twin condition predicted `r if(ct_pers$p.value < .05) "significantly" else "non-significantly"` higher Republican ad persuasiveness than Control (Control *M* = `r numformat(ctrl_pers_M)`, *SD* = `r numformat(ctrl_pers_SD)`; Digital Twin *M* = `r numformat(twin_pers_M)`, *SD* = `r numformat(twin_pers_SD)`: *t* = `r numformat(ct_pers$t.ratio)`, *p* `r pformat(ct_pers$p.value)`, *d* = `r numformat(ct_pers$estimate / pers_rmse)`).
+
+### Figure 3: Ad persuasiveness by condition
+
+```{r fig-persuasive}
+#| fig-cap: "Mean predicted ad persuasiveness by condition. Error bars = 95% CI."
+#| fig-width: 7
+#| fig-height: 5
+
+emm_pers_ci <- as_tibble(summary(emm_pers, level = 0.95))
+
+p3 <- ggplot(emm_pers_ci, aes(x = treatment, y = emmean, fill = treatment)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15, linewidth = 0.6) +
+  scale_fill_manual(values = condition_colors, guide = "none") +
+  scale_y_continuous(limits = c(0, 5), breaks = 1:5) +
+  labs(x = "Condition", y = "Predicted Persuasiveness (1–5)",
+       title = "Predicted Ad Persuasiveness for Republicans by Condition") +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.major.x = element_blank())
+
+p3
+ggsave(file.path(fig_path, "persuasiveness_by_condition.png"), p3, width = 7, height = 5, dpi = 300)
+```
+
+## Chatbot Engagement
+
+```{r engagement}
+# Turn count and engagement (only for chatbot conditions)
+chat_dat <- dat %>%
+  filter(treatment %in% c("GPT Persona", "Digital Twin") & !is.na(chatbot_turn_count))
+
+if (nrow(chat_dat) > 10) {
+  eng_test <- t.test(chatbot_turn_count ~ treatment, data = chat_dat)
+
+  chat_dat %>%
+    group_by(treatment) %>%
+    summarise(
+      N = n(),
+      `Turns (M)` = numformat(mean(chatbot_turn_count, na.rm = TRUE)),
+      `Turns (SD)` = numformat(sd(chatbot_turn_count, na.rm = TRUE)),
+      .groups = "drop"
+    ) %>%
+    gt() %>%
+    tab_header(title = "Chatbot Engagement by Condition")
+
+  cat("Turns t-test: t =", numformat(eng_test$statistic), ", p", pformat(eng_test$p.value), "\n")
+
+  # Does engagement predict accuracy?
+  m_eng <- lm(abs_error ~ chatbot_turn_count * treatment, data = chat_dat)
+  cat("\nEngagement → Absolute Error:\n")
+  print(summary(m_eng))
+} else {
+  cat("Insufficient chatbot engagement data (N =", nrow(chat_dat), "with turn counts).\n")
+}
+```
+
+## Combined Figure
+
+```{r combined-figure}
+#| fig-cap: "Summary of condition effects. (A) GREEN estimates relative to ground truth. (B) Absolute estimation error. (C) Predicted ad persuasiveness."
+#| fig-width: 14
+#| fig-height: 5
+
+p_combined <- p1 + p2 + p3 +
+  plot_annotation(tag_levels = "A") +
+  plot_layout(widths = c(1, 1, 1))
+
+p_combined
+ggsave(file.path(fig_path, "combined_figure.png"), p_combined, width = 14, height = 5, dpi = 300)
+```
+
+## Summary
+
+```{r summary-table}
+all_contrasts <- bind_rows(
+  acc_contrasts %>%
+    mutate(Outcome = "Absolute Error", d = estimate / rmse) %>%
+    select(Outcome, Contrast = contrast, b = estimate, SE, t = t.ratio, p = p.value, d),
+  pers_contrasts %>%
+    mutate(Outcome = "Persuasiveness", d = estimate / pers_rmse) %>%
+    select(Outcome, Contrast = contrast, b = estimate, SE, t = t.ratio, p = p.value, d)
+)
+
+all_contrasts %>%
+  mutate(
+    b = numformat(b),
+    SE = numformat(SE),
+    t = numformat(t),
+    p = map_chr(p, pformat),
+    d = numformat(d)
+  ) %>%
+  gt() %>%
+  tab_header(title = "Summary of All Planned Contrasts") %>%
+  tab_footnote("For Abs. Error: positive b = first condition less accurate. For Persuasiveness: negative b = first condition rated ad as less persuasive for outgroup.",
+               locations = cells_title())
+```

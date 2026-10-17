@@ -180,6 +180,15 @@ Can AI Digital Twins Bridge the Partisan Insight Gap?}
 \usepackage{array}
 \usepackage{anyfontsize}
 \usepackage{multirow}
+\usepackage{float}
+\usepackage{tabularray}
+\usepackage[normalem]{ulem}
+\usepackage{graphicx}
+\usepackage{rotating}
+\UseTblrLibrary{siunitx}
+\NewTableCommand{\tinytableDefineColor}[3]{\definecolor{#1}{#2}{#3}}
+\newcommand{\tinytableTabularrayUnderline}[1]{\underline{#1}}
+\newcommand{\tinytableTabularrayStrikeout}[1]{\sout{#1}}
 \makeatletter
 \@ifpackageloaded{caption}{}{\usepackage{caption}}
 \AtBeginDocument{%
@@ -241,7 +250,7 @@ Can AI Digital Twins Bridge the Partisan Insight Gap?}
 across the political divide by interacting with AI}
 \author{Benjamin Lira \and Noah Castelo \and Olivier Toubia \and Stefano
 Puntoni}
-\date{2026-02-17}
+\date{2026-10-16}
 
 \begin{document}
 \maketitle
@@ -331,16 +340,32 @@ identities, with the majority in the top and bottom quartiles of the
 political spectrum (Figure~\ref{fig-political-orientation}). Democrats
 rated themselves higher in environmental concern (\emph{M} = 4.15)
 relative to Republicans (\emph{M} = 3.73), \emph{d} = 0.46, \emph{p}
-\textless{} .001. While participants accurately perceived their ingroups
-(Democrats: \emph{M}\textsubscript{actual} = 4.15,
-\emph{M}\textsubscript{perceived} = 4.17, \emph{p} = 0.558; Republicans:
-\emph{M}\textsubscript{actual} = 3.73, \emph{M}\textsubscript{perceived}
-= 3.39, \emph{p} \textless{} .001), they systematically misperceived
-their political outgroups. Democrats significantly underestimated
-Republicans' environmental concern (\emph{M}\textsubscript{actual} =
-3.73, \emph{M}\textsubscript{perceived} = 2.16, \emph{d} = -1.52,
-\emph{p} \textless{} .001). Republicans also misperceived Democrats,
-though to a lesser degree (\emph{M}\textsubscript{actual} = 4.15,
+\textless{} .001. At the group level, participants' average ingroup
+estimates closely matched actual ingroup means (Democrats:
+\emph{M}\textsubscript{actual} = 4.15, \emph{M}\textsubscript{perceived}
+= 4.17, \emph{p} = 0.558; Republicans: \emph{M}\textsubscript{actual} =
+3.73, \emph{M}\textsubscript{perceived} = 3.39, \emph{p} \textless{}
+.001). However, individual-level accuracy tells a different story.
+Computing mean absolute error (MAE) between each participant's ingroup
+estimate and the actual ingroup mean, both parties showed significant
+ingroup misperception: Democrats had an average MAE of 0.50 (\emph{SD} =
+0.39, \emph{d} = 1.29, \emph{p} \textless{} .001) and Republicans had an
+MAE of 0.86 (\emph{SD} = 0.62, \emph{d} = 1.40, \emph{p} \textless{}
+.001). Republicans were significantly less accurate at predicting their
+own ingroup's attitudes than Democrats (\emph{d} = -0.71, \emph{p}
+\textless{} .001). Comparing ingroup and outgroup prediction error
+within person, outgroup MAE was significantly larger than ingroup MAE
+overall (\emph{d} = 0.44, \emph{p} \textless{} .001), but this effect
+was driven entirely by Democrats. Democrats' outgroup MAE (1.68) far
+exceeded their ingroup MAE (0.50; \emph{d} = 1.25, \emph{p} \textless{}
+.001). Republicans, by contrast, were actually \emph{more} accurate
+about Democrats (outgroup MAE = 0.70) than about their own party
+(ingroup MAE = 0.86; \emph{d} = -0.18, \emph{p} = 0.005). In terms of
+directional bias, Democrats significantly underestimated Republicans'
+environmental concern (\emph{M}\textsubscript{actual} = 3.73,
+\emph{M}\textsubscript{perceived} = 2.16, \emph{d} = -1.52, \emph{p}
+\textless{} .001). Republicans also misperceived Democrats, though to a
+lesser degree (\emph{M}\textsubscript{actual} = 4.15,
 \emph{M}\textsubscript{perceived} = 3.96, \emph{d} = -0.20, \emph{p} =
 0.002).
 
@@ -544,16 +569,17 @@ note{ }={Note: Accuracy is negative absolute error (higher = more accurate). * p
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]},
-column{2,3}={}{halign=c,},
-column{1}={}{halign=l,},
-hline{4}={1,2,3}{solid, black, 0.05em},
+hline{2}={1-3}{solid, black, 0.05em},
+hline{4}={1-3}{solid, black, 0.05em},
+hline{1}={1-3}{solid, black, 0.08em},
+hline{5}={1-3}{solid, black, 0.08em},
+column{2-3}={}{halign=c},
+column{1}={}{halign=l},
 }                     %% tabularray inner close
-\toprule
-& Accuracy & Warmth \\ \midrule %% TinyTableHeader
+& Accuracy & Warmth \\
 Time (Post) & \num{0.393}*** & \num{4.342}*** \\
 & (\num{0.038}) & (\num{0.525}) \\
 Num.Obs. & \num{1000} & \num{1000} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -621,58 +647,20 @@ note{ }={Note: Accuracy is negative absolute error (higher = more accurate). * p
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]},
-cell{2}{1}={c=3}{},cell{7}{1}={c=3}{},
-cell{1}{2}={}{halign=c,},
-cell{1}{3}={}{halign=c,},
-cell{3}{2}={}{halign=c,},
-cell{3}{3}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{4}{3}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{5}{3}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{6}{3}={}{halign=c,},
-cell{8}{2}={}{halign=c,},
-cell{8}{3}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{9}{3}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{10}{3}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{11}{3}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{12}{3}={}{halign=c,},
-cell{13}{2}={}{halign=c,},
-cell{13}{3}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{14}{3}={}{halign=c,},
-cell{2}{2}={}{halign=c, cmd=\bfseries,},
-cell{2}{3}={}{halign=c, cmd=\bfseries,},
-cell{7}{2}={}{halign=c, cmd=\bfseries,},
-cell{7}{3}={}{halign=c, cmd=\bfseries,},
-cell{1}{1}={}{halign=l,},
-cell{2}{1}={}{halign=l, cmd=\bfseries,},
-cell{7}{1}={}{halign=l, cmd=\bfseries,},
-cell{3}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{4}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{5}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{6}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{8}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{9}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{10}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{11}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{12}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{13}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{14}{1}={}{halign=l, preto={\hspace{1em}},},
+hline{16}={1-3}{solid, cD3D3D3, 0.1em},
+hline{18}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
 }                     %% tabularray inner close
-\toprule
-& Accuracy & Warmth \\ \midrule %% TinyTableHeader
-Effects by Political Affiliation && \\
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy & Warmth \\
+Effects by Political Affiliation & Effects by Political Affiliation & Effects by Political Affiliation \\
 Time effect (Democrat) & 0.628*** & 5.149*** \\
 & (0.052) & (0.744) \\
 Time effect (Republican) & 0.163** & 3.548*** \\
 & (0.051) & (0.738) \\
-Full Regression Results && \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
 Time (Post) & \num{0.628}*** & \num{5.149}*** \\
 & (\num{0.052}) & (\num{0.744}) \\
 Learner Party (R→D) & \num{0.976}*** & \num{13.324}*** \\
@@ -680,7 +668,6 @@ Learner Party (R→D) & \num{0.976}*** & \num{13.324}*** \\
 Time × Learner Party & \num{-0.465}*** & \num{-1.602} \\
 & (\num{0.073}) & (\num{1.048}) \\
 Num.Obs. & \num{1000} & \num{1000} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -721,84 +708,20 @@ note{ }={Note: Time effects show pre-to-post change at Low Extremism (-1 SD) and
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]},
-cell{2}{1}={c=3}{},cell{7}{1}={c=3}{},
-cell{1}{2}={}{halign=c,},
-cell{1}{3}={}{halign=c,},
-cell{3}{2}={}{halign=c,},
-cell{3}{3}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{4}{3}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{5}{3}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{6}{3}={}{halign=c,},
-cell{8}{2}={}{halign=c,},
-cell{8}{3}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{9}{3}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{10}{3}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{11}{3}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{12}{3}={}{halign=c,},
-cell{13}{2}={}{halign=c,},
-cell{13}{3}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{14}{3}={}{halign=c,},
-cell{15}{2}={}{halign=c,},
-cell{15}{3}={}{halign=c,},
-cell{16}{2}={}{halign=c,},
-cell{16}{3}={}{halign=c,},
-cell{17}{2}={}{halign=c,},
-cell{17}{3}={}{halign=c,},
-cell{18}{2}={}{halign=c,},
-cell{18}{3}={}{halign=c,},
-cell{19}{2}={}{halign=c,},
-cell{19}{3}={}{halign=c,},
-cell{20}{2}={}{halign=c,},
-cell{20}{3}={}{halign=c,},
-cell{21}{2}={}{halign=c,},
-cell{21}{3}={}{halign=c,},
-cell{22}{2}={}{halign=c,},
-cell{22}{3}={}{halign=c,},
-cell{2}{2}={}{halign=c, cmd=\bfseries,},
-cell{2}{3}={}{halign=c, cmd=\bfseries,},
-cell{7}{2}={}{halign=c, cmd=\bfseries,},
-cell{7}{3}={}{halign=c, cmd=\bfseries,},
-cell{1}{1}={}{halign=l,},
-cell{2}{1}={}{halign=l, cmd=\bfseries,},
-cell{7}{1}={}{halign=l, cmd=\bfseries,},
-cell{3}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{4}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{5}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{6}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{8}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{9}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{10}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{11}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{12}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{13}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{14}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{15}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{16}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{17}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{18}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{19}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{20}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{21}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{22}{1}={}{halign=l, preto={\hspace{1em}},},
-hline{22}={1,2,3}{solid, lightgray, 0.1em},
-hline{23}={1,2,3}{solid, lightgray, 0.1em},
+hline{22}={1-3}{solid, cD3D3D3, 0.1em},
+hline{23}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
 }                     %% tabularray inner close
-\toprule
-& Accuracy & Warmth \\ \midrule %% TinyTableHeader
-Simple Effects by Extremism Level && \\
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy & Warmth \\
+Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level \\
 Time effect (Low Extremism) & 0.386*** & 3.847*** \\
 & (0.053) & (0.761) \\
 Time effect (High Extremism) & 0.419*** & 5.002*** \\
 & (0.052) & (0.744) \\
-Full Regression Results && \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
 Time (Post) & \num{0.721}*** & \num{5.039}* \\
 & (\num{0.168}) & (\num{2.416}) \\
 Learner Party (R→D) & \num{0.898}*** & \num{14.760}* \\
@@ -814,7 +737,6 @@ Learner Party × Extremism & \num{0.001} & \num{-0.088} \\
 Time × Learner Party × Extremism & \num{0.007} & \num{0.076} \\
 & (\num{0.005}) & (\num{0.076}) \\
 Num.Obs. & \num{1000} & \num{1000} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -854,12 +776,14 @@ note{ }={Note: Regressions control for pre-interaction values. * p<0.05, ** p<0.
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]},
-column{2,3}={}{halign=c,},
-column{1}={}{halign=l,},
-hline{10}={1,2,3}{solid, black, 0.05em},
+hline{2}={1-3}{solid, black, 0.05em},
+hline{10}={1-3}{solid, black, 0.05em},
+hline{1}={1-3}{solid, black, 0.08em},
+hline{13}={1-3}{solid, black, 0.08em},
+column{2-3}={}{halign=c},
+column{1}={}{halign=l},
 }                     %% tabularray inner close
-\toprule
-& Accuracy & Warmth \\ \midrule %% TinyTableHeader
+& Accuracy & Warmth \\
 Baseline Accuracy & \num{0.354}*** &  \\
 & (\num{0.033}) &  \\
 Baseline Warmth &  & \num{0.910}*** \\
@@ -871,7 +795,6 @@ Bot Empathy & \num{0.050}+ & \num{1.010}+ \\
 Num.Obs. & \num{500} & \num{500} \\
 R2 & \num{0.241} & \num{0.805} \\
 R2 Adj. & \num{0.236} & \num{0.804} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -937,43 +860,23 @@ note{}={+ p \num{< 0.1}, * p \num{< 0.05}, ** p \num{< 0.01}, *** p \num{< 0.001
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]Q[]Q[]},
-column{3,5}={}{halign=c,},
-column{1}={}{halign=l,},
-cell{2}{2}={}{halign=c,},
-cell{2}{4}={}{halign=c,},
-cell{3}{2}={}{halign=c,},
-cell{3}{4}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{4}{4}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{5}{4}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{6}{4}={}{halign=c,},
-cell{7}{2}={}{halign=c,},
-cell{7}{4}={}{halign=c,},
-cell{8}{2}={}{halign=c,},
-cell{8}{4}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{9}{4}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{10}{4}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{11}{4}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{12}{4}={}{halign=c,},
-cell{13}{2}={}{halign=c,},
-cell{13}{4}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{14}{4}={}{halign=c,},
-cell{15}{2}={}{halign=c,},
-cell{15}{4}={}{halign=c,},
-cell{1}{2}={c=2,}{halign=c, halign=c,},
-cell{1}{4}={c=2,}{halign=c, halign=c,},
-hline{13}={1,2,3,4,5}{solid, black, 0.05em},
+hline{2}={5}{solid, black, 0.03em},
+hline{2}={2,4}{solid, black, 0.03em, l=-0.5},
+hline{2}={3}{solid, black, 0.03em, r=-0.5},
+hline{3}={1-5}{solid, black, 0.05em},
+hline{13}={1-5}{solid, black, 0.05em},
+hline{1}={1-5}{solid, black, 0.08em},
+hline{16}={1-5}{solid, black, 0.08em},
+column{3,5}={}{halign=c},
+cell{1}{1}={}{halign=c},
+cell{1}{2}={c=2}{halign=c},
+cell{1}{4}={c=2}{halign=c},
+cell{2-15}{1}={}{halign=l},
+cell{2-15}{2}={}{halign=c},
+cell{2-15}{4}={}{halign=c},
 }                     %% tabularray inner close
-\toprule
-& Accuracy &  & Warmth &  \\ \cmidrule[lr]{2-3}\cmidrule[lr]{4-5}
-& Turn Count & Log(Word Count) & Turn Count  & Log(Word Count)  \\ \midrule %% TinyTableHeader
+& Accuracy &  & Warmth &  \\
+& Turn Count & Log(Word Count) & Turn Count  & Log(Word Count)  \\
 Learner Party (R→D) & \num{0.202}** & \num{0.204}** & \num{-0.828} & \num{-0.778} \\
 & (\num{0.068}) & (\num{0.068}) & (\num{1.082}) & (\num{1.082}) \\
 Baseline Accuracy & \num{-0.684}*** & \num{-0.686}*** &  &  \\
@@ -987,7 +890,6 @@ Log(Word Count) &  & \num{-0.050} &  & \num{-0.869} \\
 Num.Obs. & \num{500} & \num{500} & \num{500} & \num{500} \\
 R2 & \num{0.434} & \num{0.434} & \num{0.022} & \num{0.021} \\
 R2 Adj. & \num{0.430} & \num{0.431} & \num{0.016} & \num{0.015} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -1065,58 +967,20 @@ note{ }={Note: Confidence rated on 1-5 scale. * p<0.05, ** p<0.01, *** p<0.001},
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]},
-cell{2}{1}={c=3}{},cell{7}{1}={c=3}{},
-cell{1}{2}={}{halign=c,},
-cell{1}{3}={}{halign=c,},
-cell{3}{2}={}{halign=c,},
-cell{3}{3}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{4}{3}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{5}{3}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{6}{3}={}{halign=c,},
-cell{8}{2}={}{halign=c,},
-cell{8}{3}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{9}{3}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{10}{3}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{11}{3}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{12}{3}={}{halign=c,},
-cell{13}{2}={}{halign=c,},
-cell{13}{3}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{14}{3}={}{halign=c,},
-cell{2}{2}={}{halign=c, cmd=\bfseries,},
-cell{2}{3}={}{halign=c, cmd=\bfseries,},
-cell{7}{2}={}{halign=c, cmd=\bfseries,},
-cell{7}{3}={}{halign=c, cmd=\bfseries,},
-cell{1}{1}={}{halign=l,},
-cell{2}{1}={}{halign=l, cmd=\bfseries,},
-cell{7}{1}={}{halign=l, cmd=\bfseries,},
-cell{3}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{4}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{5}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{6}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{8}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{9}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{10}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{11}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{12}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{13}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{14}{1}={}{halign=l, preto={\hspace{1em}},},
+hline{16}={1-3}{solid, cD3D3D3, 0.1em},
+hline{18}={1-3}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=3}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
+cell{2,7}{3}={}{font=\bfseries},
 }                     %% tabularray inner close
-\toprule
-& Confidence (Main Effect) & Confidence (Interaction) \\ \midrule %% TinyTableHeader
-Simple Effects by Political Affiliation && \\
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Confidence (Main Effect) & Confidence (Interaction) \\
+Simple Effects by Political Affiliation & Simple Effects by Political Affiliation & Simple Effects by Political Affiliation \\
 Time effect (D→R) &  & -0.065 \\
 &  & (0.066) \\
 Time effect (R→D) &  & 0.306*** \\
 &  & (0.065) \\
-Full Regression Results && \\
+Full Regression Results & Full Regression Results & Full Regression Results \\
 Time (Post) & \num{0.122}** & \num{-0.065} \\
 & (\num{0.047}) & (\num{0.066}) \\
 Learner Party (R→D) &  & \num{0.150}+ \\
@@ -1124,7 +988,6 @@ Learner Party (R→D) &  & \num{0.150}+ \\
 Time × Learner Party &  & \num{0.370}*** \\
 &  & (\num{0.093}) \\
 Num.Obs. & \num{1000} & \num{1000} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -1378,6 +1241,82 @@ comments on the design.
 
 \subsection{Appendix}\label{appendix}
 
+\subsubsection{Bot Validity: Do the chatbots accurately represent their
+target
+groups?}\label{bot-validity-do-the-chatbots-accurately-represent-their-target-groups}
+
+A fundamental assumption of the synthetic-contact paradigm is that the
+chatbot faithfully represents the political group it simulates. We test
+this assumption directly by administering the same six
+environmental-attitude items to each chatbot and comparing the bot's
+responses to the actual group means observed in our sample.
+
+Rather than sampling multiple responses, we exploit GPT-4o's
+log-probability outputs. For each (bot × question) pair, we request a
+single-token completion restricted to digits 1--5, extract the
+log-probabilities for all five digit tokens, renormalize them to sum to
+one, and compute a weighted expected value
+\(E = \sum_{i=1}^{5} i \cdot p_i\). This yields a continuous,
+deterministic point estimate that reflects the model's full distribution
+over response options.
+
+\begin{figure}
+
+\centering{
+
+\pandocbounded{\includegraphics[keepaspectratio]{report_files/figure-pdf/fig-bot-validity-1.pdf}}
+
+}
+
+\caption{\label{fig-bot-validity}Bot vs.~human environmental attitude
+scores across the six items and their composite average. Solid lines
+connect human means; dashed lines connect bot expected values
+(log-probability-weighted scores). The rightmost point shows the
+composite mean across all six items.}
+
+\end{figure}%
+
+\begin{table}
+\caption{Bot vs.~human environmental attitude scores by question.}\tabularnewline
+
+\caption*{
+{\large Bot vs. Human Environmental Attitude Scores}
+} 
+\fontsize{12.0pt}{14.4pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}crrrr}
+\toprule
+ & \multicolumn{2}{c}{Democrats} & \multicolumn{2}{c}{Republicans} \\ 
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Question & Democrat (Humans) & Democrat (Bot) & Republican (Humans) & Republican (Bot) \\ 
+\midrule\addlinespace[2.5pt]
+Products don't
+harm environment & 4.42 & 4.98 & 4.05 & 3.07 \\ 
+Consider env.
+impact of actions & 4.14 & 4.25 & 3.70 & 2.97 \\ 
+Purchase habits
+affected by concern & 3.86 & 4.12 & 3.40 & 2.75 \\ 
+Concerned about
+wasting resources & 4.48 & 5.00 & 3.96 & 3.32 \\ 
+Environmentally
+responsible & 4.01 & 4.18 & 3.80 & 3.47 \\ 
+Willing to be
+inconvenienced & 3.98 & 4.93 & 3.46 & 2.92 \\ 
+{\bfseries Average} & {\bfseries 4.15} & {\bfseries 4.58} & {\bfseries 3.73} & {\bfseries 3.08} \\ 
+\bottomrule
+\end{tabular*}
+\end{table}
+
+The bots pass a discriminant validity test: each bot is closer to its
+target group than to the outgroup on every item. The Democrat bot's
+composite score deviates 0.43 points from actual Democrats, compared to
+0.85 points from actual Republicans. The Republican bot deviates 0.64
+points from actual Republicans, versus 1.06 points from actual
+Democrats. This pattern holds across all six individual items for both
+bots (all 12 item-level comparisons pass). Both bots are miscalibrated
+in magnitude---the Democrat bot overshoots actual Democratic attitudes
+and the Republican bot undershoots actual Republican attitudes---but
+they correctly preserve the ordinal structure of the party gap.
+
 \subsubsection{Does interacting with the chatbot improve applied
 judgment?}\label{does-interacting-with-the-chatbot-improve-applied-judgment}
 
@@ -1479,7 +1418,7 @@ Smart/sustainable living (Topics 27, 36)
 
 \centering{
 
-\includegraphics[width=11.88in,height=\textheight,keepaspectratio]{../output/figures/bert_topic_slogans.png}
+\includegraphics[width=11.88in,height=\textheight,keepaspectratio]{../../output/figures/bert_topic_slogans.png}
 
 }
 
@@ -1625,215 +1564,26 @@ note{ }={Note: Simple effects show pre-to-post change by learner party (D→R vs
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]},
-cell{3}{1}={c=9}{},cell{8}{1}={c=9}{},cell{13}{1}={c=9}{},
-cell{1}{3}={}{halign=c,},
-cell{1}{4}={}{halign=c,},
-cell{1}{5}={}{halign=c,},
-cell{1}{7}={}{halign=c,},
-cell{1}{8}={}{halign=c,},
-cell{1}{9}={}{halign=c,},
-cell{2}{2}={}{halign=c,},
-cell{2}{3}={}{halign=c,},
-cell{2}{4}={}{halign=c,},
-cell{2}{5}={}{halign=c,},
-cell{2}{6}={}{halign=c,},
-cell{2}{7}={}{halign=c,},
-cell{2}{8}={}{halign=c,},
-cell{2}{9}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{4}{3}={}{halign=c,},
-cell{4}{4}={}{halign=c,},
-cell{4}{5}={}{halign=c,},
-cell{4}{6}={}{halign=c,},
-cell{4}{7}={}{halign=c,},
-cell{4}{8}={}{halign=c,},
-cell{4}{9}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{5}{3}={}{halign=c,},
-cell{5}{4}={}{halign=c,},
-cell{5}{5}={}{halign=c,},
-cell{5}{6}={}{halign=c,},
-cell{5}{7}={}{halign=c,},
-cell{5}{8}={}{halign=c,},
-cell{5}{9}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{6}{3}={}{halign=c,},
-cell{6}{4}={}{halign=c,},
-cell{6}{5}={}{halign=c,},
-cell{6}{6}={}{halign=c,},
-cell{6}{7}={}{halign=c,},
-cell{6}{8}={}{halign=c,},
-cell{6}{9}={}{halign=c,},
-cell{7}{2}={}{halign=c,},
-cell{7}{3}={}{halign=c,},
-cell{7}{4}={}{halign=c,},
-cell{7}{5}={}{halign=c,},
-cell{7}{6}={}{halign=c,},
-cell{7}{7}={}{halign=c,},
-cell{7}{8}={}{halign=c,},
-cell{7}{9}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{9}{3}={}{halign=c,},
-cell{9}{4}={}{halign=c,},
-cell{9}{5}={}{halign=c,},
-cell{9}{6}={}{halign=c,},
-cell{9}{7}={}{halign=c,},
-cell{9}{8}={}{halign=c,},
-cell{9}{9}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{10}{3}={}{halign=c,},
-cell{10}{4}={}{halign=c,},
-cell{10}{5}={}{halign=c,},
-cell{10}{6}={}{halign=c,},
-cell{10}{7}={}{halign=c,},
-cell{10}{8}={}{halign=c,},
-cell{10}{9}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{11}{3}={}{halign=c,},
-cell{11}{4}={}{halign=c,},
-cell{11}{5}={}{halign=c,},
-cell{11}{6}={}{halign=c,},
-cell{11}{7}={}{halign=c,},
-cell{11}{8}={}{halign=c,},
-cell{11}{9}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{12}{3}={}{halign=c,},
-cell{12}{4}={}{halign=c,},
-cell{12}{5}={}{halign=c,},
-cell{12}{6}={}{halign=c,},
-cell{12}{7}={}{halign=c,},
-cell{12}{8}={}{halign=c,},
-cell{12}{9}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{14}{3}={}{halign=c,},
-cell{14}{4}={}{halign=c,},
-cell{14}{5}={}{halign=c,},
-cell{14}{6}={}{halign=c,},
-cell{14}{7}={}{halign=c,},
-cell{14}{8}={}{halign=c,},
-cell{14}{9}={}{halign=c,},
-cell{15}{2}={}{halign=c,},
-cell{15}{3}={}{halign=c,},
-cell{15}{4}={}{halign=c,},
-cell{15}{5}={}{halign=c,},
-cell{15}{6}={}{halign=c,},
-cell{15}{7}={}{halign=c,},
-cell{15}{8}={}{halign=c,},
-cell{15}{9}={}{halign=c,},
-cell{16}{2}={}{halign=c,},
-cell{16}{3}={}{halign=c,},
-cell{16}{4}={}{halign=c,},
-cell{16}{5}={}{halign=c,},
-cell{16}{6}={}{halign=c,},
-cell{16}{7}={}{halign=c,},
-cell{16}{8}={}{halign=c,},
-cell{16}{9}={}{halign=c,},
-cell{17}{2}={}{halign=c,},
-cell{17}{3}={}{halign=c,},
-cell{17}{4}={}{halign=c,},
-cell{17}{5}={}{halign=c,},
-cell{17}{6}={}{halign=c,},
-cell{17}{7}={}{halign=c,},
-cell{17}{8}={}{halign=c,},
-cell{17}{9}={}{halign=c,},
-cell{18}{2}={}{halign=c,},
-cell{18}{3}={}{halign=c,},
-cell{18}{4}={}{halign=c,},
-cell{18}{5}={}{halign=c,},
-cell{18}{6}={}{halign=c,},
-cell{18}{7}={}{halign=c,},
-cell{18}{8}={}{halign=c,},
-cell{18}{9}={}{halign=c,},
-cell{19}{2}={}{halign=c,},
-cell{19}{3}={}{halign=c,},
-cell{19}{4}={}{halign=c,},
-cell{19}{5}={}{halign=c,},
-cell{19}{6}={}{halign=c,},
-cell{19}{7}={}{halign=c,},
-cell{19}{8}={}{halign=c,},
-cell{19}{9}={}{halign=c,},
-cell{20}{2}={}{halign=c,},
-cell{20}{3}={}{halign=c,},
-cell{20}{4}={}{halign=c,},
-cell{20}{5}={}{halign=c,},
-cell{20}{6}={}{halign=c,},
-cell{20}{7}={}{halign=c,},
-cell{20}{8}={}{halign=c,},
-cell{20}{9}={}{halign=c,},
-cell{21}{2}={}{halign=c,},
-cell{21}{3}={}{halign=c,},
-cell{21}{4}={}{halign=c,},
-cell{21}{5}={}{halign=c,},
-cell{21}{6}={}{halign=c,},
-cell{21}{7}={}{halign=c,},
-cell{21}{8}={}{halign=c,},
-cell{21}{9}={}{halign=c,},
-cell{3}{2}={}{halign=c, cmd=\bfseries,},
-cell{3}{3}={}{halign=c, cmd=\bfseries,},
-cell{3}{4}={}{halign=c, cmd=\bfseries,},
-cell{3}{5}={}{halign=c, cmd=\bfseries,},
-cell{3}{6}={}{halign=c, cmd=\bfseries,},
-cell{3}{7}={}{halign=c, cmd=\bfseries,},
-cell{3}{8}={}{halign=c, cmd=\bfseries,},
-cell{3}{9}={}{halign=c, cmd=\bfseries,},
-cell{8}{2}={}{halign=c, cmd=\bfseries,},
-cell{8}{3}={}{halign=c, cmd=\bfseries,},
-cell{8}{4}={}{halign=c, cmd=\bfseries,},
-cell{8}{5}={}{halign=c, cmd=\bfseries,},
-cell{8}{6}={}{halign=c, cmd=\bfseries,},
-cell{8}{7}={}{halign=c, cmd=\bfseries,},
-cell{8}{8}={}{halign=c, cmd=\bfseries,},
-cell{8}{9}={}{halign=c, cmd=\bfseries,},
-cell{13}{2}={}{halign=c, cmd=\bfseries,},
-cell{13}{3}={}{halign=c, cmd=\bfseries,},
-cell{13}{4}={}{halign=c, cmd=\bfseries,},
-cell{13}{5}={}{halign=c, cmd=\bfseries,},
-cell{13}{6}={}{halign=c, cmd=\bfseries,},
-cell{13}{7}={}{halign=c, cmd=\bfseries,},
-cell{13}{8}={}{halign=c, cmd=\bfseries,},
-cell{13}{9}={}{halign=c, cmd=\bfseries,},
-cell{1}{1}={}{halign=l,},
-cell{2}{1}={}{halign=l,},
-cell{3}{1}={}{halign=l, cmd=\bfseries,},
-cell{8}{1}={}{halign=l, cmd=\bfseries,},
-cell{13}{1}={}{halign=l, cmd=\bfseries,},
-cell{4}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{5}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{6}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{7}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{9}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{10}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{11}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{12}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{14}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{15}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{16}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{17}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{18}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{19}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{20}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{21}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{1}{2}={c=4,}{halign=c, halign=c,},
-cell{1}{6}={c=4,}{halign=c, halign=c,},
-hline{8}={1,2,3,4,5,6,7,8,9}{solid, lightgray, 0.1em},
-hline{13}={1,2,3,4,5,6,7,8,9}{solid, lightgray, 0.1em},
-hline{21}={1,2,3,4,5,6,7,8,9}{solid, lightgray, 0.1em},
+hline{8}={1-9}{solid, cD3D3D3, 0.1em},
+hline{13}={1-9}{solid, cD3D3D3, 0.1em},
+hline{21}={1-9}{solid, cD3D3D3, 0.1em},
+row{3,8,13}={}{font=\bfseries},
 rowsep=2pt, colsep=3pt,
 }                     %% tabularray inner close
-\toprule
-& Accuracy &  &  &  & Warmth &  &  &  \\ \cmidrule[lr]{2-5}\cmidrule[lr]{6-9}
-& Main Effect & Partisanship & Extremism & Full Model & Main Effect  & Partisanship  & Extremism  & Full Model  \\ \midrule %% TinyTableHeader
-Simple Effects by Learner Party &&&&&&&& \\
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Accuracy &  &  &  & Warmth &  &  &  \\
+& Main Effect & Partisanship & Extremism & Full Model & Main Effect  & Partisanship  & Extremism  & Full Model  \\
+Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party & Simple Effects by Learner Party \\
 Time effect (D→R) & 0.628*** & 0.628*** &  &  & 5.149*** & 5.149*** &  &  \\
 & (0.052) & (0.052) &  &  & (0.744) & (0.744) &  &  \\
 Time effect (R→D) & 0.163** & 0.163** &  &  & 3.548*** & 3.548*** &  &  \\
 & (0.051) & (0.051) &  &  & (0.738) & (0.738) &  &  \\
-Simple Effects by Extremism Level &&&&&&&& \\
+Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level & Simple Effects by Extremism Level \\
 Time effect (Low Extremism) &  &  & 0.386*** & 0.386*** &  &  & 3.847*** & 3.847*** \\
 &  &  & (0.053) & (0.053) &  &  & (0.761) & (0.761) \\
 Time effect (High Extremism) &  &  & 0.419*** & 0.419*** &  &  & 5.002*** & 5.002*** \\
 &  &  & (0.052) & (0.052) &  &  & (0.744) & (0.744) \\
-Full Regression Results &&&&&&&& \\
+Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results & Full Regression Results \\
 Time (Post) & \num{0.393}*** & \num{0.628}*** & \num{0.241}* & \num{0.721}*** & \num{4.342}*** & \num{5.149}*** & \num{2.303} & \num{5.039}* \\
 Learner Party (R→D) &  & \num{0.976}*** & \num{0.717}*** & \num{0.898}*** &  & \num{13.324}*** & \num{10.686}*** & \num{14.760}* \\
 Political Extremism &  &  & \num{-0.009}*** & \num{-0.008}* &  &  & \num{-0.483}*** & \num{-0.429}*** \\
@@ -1842,7 +1592,6 @@ Time × Extremism &  &  & \num{0.004} & \num{-0.002} &  &  & \num{0.054} & \num{
 Learner Party × Extremism &  &  &  & \num{0.001} &  &  &  & \num{-0.088} \\
 Time × Learner Party × Extremism &  &  &  & \num{0.007} &  &  &  & \num{0.076} \\
 Num.Obs. & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} & \num{1000} \\
-\bottomrule
 \end{talltblr}
 }
 
@@ -2032,45 +1781,19 @@ note{ }={Note: Warmth difference = outgroup - ingroup. Positive values indicate 
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 colspec={Q[]Q[]},
-cell{2}{1}={c=2}{},cell{7}{1}={c=2}{},
-cell{1}{2}={}{halign=c,},
-cell{3}{2}={}{halign=c,},
-cell{4}{2}={}{halign=c,},
-cell{5}{2}={}{halign=c,},
-cell{6}{2}={}{halign=c,},
-cell{8}{2}={}{halign=c,},
-cell{9}{2}={}{halign=c,},
-cell{10}{2}={}{halign=c,},
-cell{11}{2}={}{halign=c,},
-cell{12}{2}={}{halign=c,},
-cell{13}{2}={}{halign=c,},
-cell{14}{2}={}{halign=c,},
-cell{2}{2}={}{halign=c, cmd=\bfseries,},
-cell{7}{2}={}{halign=c, cmd=\bfseries,},
-cell{1}{1}={}{halign=l,},
-cell{2}{1}={}{halign=l, cmd=\bfseries,},
-cell{7}{1}={}{halign=l, cmd=\bfseries,},
-cell{3}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{4}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{5}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{6}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{8}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{9}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{10}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{11}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{12}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{13}{1}={}{halign=l, preto={\hspace{1em}},},
-cell{14}{1}={}{halign=l, preto={\hspace{1em}},},
-hline{14}={1,2}{solid, lightgray, 0.1em},
+hline{14}={1-2}{solid, cD3D3D3, 0.1em},
+hline{16}={1-2}{solid, cD3D3D3, 0.1em},
+cell{2,7}{1}={c=2}{font=\bfseries},
+cell{2,7}{2}={}{font=\bfseries},
 }                     %% tabularray inner close
-\toprule
-& Warmth Difference \\ \midrule %% TinyTableHeader
-Simple Effects by Political Affiliation & \\
+\tinytableDefineColor{cD3D3D3}{HTML}{D3D3D3}
+& Warmth Difference \\
+Simple Effects by Political Affiliation & Simple Effects by Political Affiliation \\
 Time effect (D→R) & 6.218*** \\
 & (0.943) \\
 Time effect (R→D) & 5.206*** \\
 & (0.935) \\
-Full Regression Results & \\
+Full Regression Results & Full Regression Results \\
 Time (Post) & \num{6.218}*** \\
 & (\num{0.943}) \\
 Learner Party (R→D) & \num{8.336}** \\
@@ -2078,7 +1801,6 @@ Learner Party (R→D) & \num{8.336}** \\
 Time × Learner Party & \num{-1.011} \\
 & (\num{1.328}) \\
 Num.Obs. & \num{1000} \\
-\bottomrule
 \end{talltblr}
 
 }
@@ -2956,34 +2678,34 @@ message.
 \subsubsection{Data Availability}\label{data-availability}
 
 Raw data:
-\href{../data/raw/qualtrics.parquet}{data/raw/qualtrics.parquet}
+\href{../../data/raw/qualtrics.parquet}{data/raw/qualtrics.parquet}
 
 Cleaned data:
-\href{../data/processed/cleaned_data.parquet}{data/processed/cleaned\_data.parquet}
+\href{../../data/processed/cleaned_data.parquet}{data/processed/cleaned\_data.parquet}
 
 Analysis data (minimal, for publication):
-\href{../data/processed/analysis_data.parquet}{data/processed/analysis\_data.parquet}
+\href{../../data/processed/analysis_data.parquet}{data/processed/analysis\_data.parquet}
 
 Conversations:
-\href{../data/processed/conversations/}{data/processed/conversations/}
+\href{../../data/processed/conversations/}{data/processed/conversations/}
 
 \subsubsection{Code Availability}\label{code-availability}
 
-Data cleaning: \href{../src/r/clean_data.R}{src/r/clean\_data.R}
+Data cleaning: \href{../../src/r/clean_data.R}{src/r/clean\_data.R}
 
 Analysis dataset creation:
-\href{../src/r/create_analysis_data.R}{src/r/create\_analysis\_data.R}
+\href{../../src/r/create_analysis_data.R}{src/r/create\_analysis\_data.R}
 
 Conversation download:
-\href{../src/python/download_conversations.py}{src/python/download\_conversations.py}
+\href{../../src/python/download_conversations.py}{src/python/download\_conversations.py}
 
 Extreme cases analysis:
-\href{../src/r/analyze_extreme_cases.R}{src/r/analyze\_extreme\_cases.R}
+\href{../../src/r/analyze_extreme_cases.R}{src/r/analyze\_extreme\_cases.R}
 
 \subsubsection{Pre-Registration}\label{pre-registration}
 
 This study was pre-registered prior to data collection. See
-\href{../docs/pre-registration.md}{docs/pre-registration.md} for
+\href{../../docs/pre-registration.md}{docs/pre-registration.md} for
 complete details including hypotheses, measures, sample size
 justification, and planned analyses.
 
@@ -2992,14 +2714,14 @@ justification, and planned analyses.
 \begin{verbatim}
 R version 4.5.0 (2025-04-11)
 Platform: aarch64-apple-darwin20
-Running under: macOS 26.2
+Running under: macOS 26.7.1
 
 Matrix products: default
 BLAS:   /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRblas.0.dylib 
 LAPACK: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
 
 locale:
-[1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
+[1] en_US/C.UTF-8/en_US/C/en_US/en_US
 
 time zone: America/New_York
 tzcode source: internal
@@ -3008,30 +2730,32 @@ attached base packages:
 [1] stats     graphics  grDevices utils     datasets  methods   base     
 
 other attached packages:
- [1] effectsize_1.0.1   jsonlite_2.0.0     tinytable_0.9.0    emmeans_1.11.1     patchwork_1.3.2    ggpubr_0.6.0      
- [7] gt_1.0.0           modelsummary_2.3.0 lmerTest_3.1-3     lme4_1.1-37        Matrix_1.7-3       arrow_19.0.1.1    
-[13] lubridate_1.9.4    forcats_1.0.0      stringr_1.5.1      dplyr_1.1.4        purrr_1.1.0        readr_2.1.5       
-[19] tidyr_1.3.1        tibble_3.3.0       ggplot2_3.5.2      tidyverse_2.0.0   
+ [1] effectsize_1.0.1   jsonlite_2.0.0     tinytable_0.16.0   emmeans_2.0.1      patchwork_1.3.2    ggpubr_1.0.0      
+ [7] gt_1.0.0           modelsummary_2.6.0 lmerTest_3.1-3     lme4_1.1-37        Matrix_1.7-3       arrow_19.0.1.1    
+[13] lubridate_1.9.4    forcats_1.0.0      stringr_1.5.1      dplyr_1.2.1        purrr_1.1.0        readr_2.1.5       
+[19] tidyr_1.3.2        tibble_3.3.0       ggplot2_4.0.2      tidyverse_2.0.0   
 
 loaded via a namespace (and not attached):
- [1] Rdpack_2.6.4        gridExtra_2.3       rlang_1.1.6         magrittr_2.0.3      compiler_4.5.0     
- [6] mgcv_1.9-1          systemfonts_1.2.3   vctrs_0.6.5         pkgconfig_2.0.3     fastmap_1.2.0      
-[11] backports_1.5.0     labeling_0.4.3      promises_1.3.3      rmarkdown_2.29      tzdb_0.5.0         
-[16] ps_1.9.1            nloptr_2.2.1        ragg_1.4.0          bit_4.6.0           xfun_0.52          
-[21] litedown_0.7        later_1.4.2         parallel_4.5.0      broom_1.0.9         R6_2.6.1           
-[26] tables_0.9.31       stringi_1.8.7       RColorBrewer_1.1-3  car_3.1-3           boot_1.3-31        
-[31] lmtest_0.9-40       numDeriv_2016.8-1.1 estimability_1.5.1  Rcpp_1.0.14         assertthat_0.2.1   
-[36] knitr_1.50          zoo_1.8-14          parameters_0.28.0   splines_4.5.0       timechange_0.3.0   
-[41] tidyselect_1.2.1    abind_1.4-8         yaml_2.3.10         websocket_1.4.4     codetools_0.2-20   
-[46] processx_3.8.6      lattice_0.22-6      withr_3.0.2         bayestestR_0.16.1   coda_0.19-4.1      
-[51] evaluate_1.0.4      xml2_1.3.8          pillar_1.11.0       carData_3.0-5       checkmate_2.3.2    
-[56] reformulas_0.4.1    insight_1.4.0       generics_0.1.4      chromote_0.5.1      hms_1.1.3          
-[61] scales_1.4.0        minqa_1.2.8         xtable_1.8-4        glue_1.8.0          tools_4.5.0        
-[66] webshot2_0.1.2      data.table_1.17.8   egg_0.4.5           ggsignif_0.6.4      fs_1.6.6           
-[71] mvtnorm_1.3-3       grid_4.5.0          rbibutils_2.3       datawizard_1.2.0    nlme_3.1-168       
-[76] performance_0.15.0  Formula_1.2-5       cli_3.6.5           textshaping_1.0.1   fansi_1.0.6        
-[81] gtable_0.3.6        rstatix_0.7.2       sass_0.4.10         digest_0.6.37       pbkrtest_0.5.4     
-[86] farver_2.1.2        htmltools_0.5.8.1   lifecycle_1.0.4     bit64_4.6.0-1       MASS_7.3-65        
+ [1] Rdpack_2.6.4        gridExtra_2.3       rlang_1.3.0         magrittr_2.0.3      compiler_4.5.0     
+ [6] mgcv_1.9-1          png_0.1-8           systemfonts_1.2.3   vctrs_0.7.3         crayon_1.5.3       
+[11] pkgconfig_2.0.3     fastmap_1.2.0       backports_1.5.0     labeling_0.4.3      promises_1.3.3     
+[16] rmarkdown_2.29      tzdb_0.5.0          ps_1.9.1            nloptr_2.2.1        ragg_1.4.0         
+[21] bit_4.6.0           xfun_0.52           later_1.4.2         broom_1.0.12        parallel_4.5.0     
+[26] R6_2.6.1            tables_0.9.31       stringi_1.8.7       RColorBrewer_1.1-3  parallelly_1.45.1  
+[31] car_3.1-3           boot_1.3-31         lmtest_0.9-40       numDeriv_2016.8-1.1 estimability_1.5.1 
+[36] Rcpp_1.0.14         assertthat_0.2.1    knitr_1.50          future.apply_1.20.1 zoo_1.8-14         
+[41] parameters_0.28.0   splines_4.5.0       timechange_0.3.0    tidyselect_1.2.1    abind_1.4-8        
+[46] yaml_2.3.10         websocket_1.4.4     codetools_0.2-20    processx_3.8.6      listenv_0.9.1      
+[51] lattice_0.22-6      withr_3.0.2         bayestestR_0.16.1   S7_0.2.1            coda_0.19-4.1      
+[56] evaluate_1.0.4      archive_1.1.12      future_1.67.0       xml2_1.3.8          pillar_1.11.0      
+[61] carData_3.0-5       checkmate_2.3.2     reformulas_0.4.1    insight_1.4.0       generics_0.1.4     
+[66] vroom_1.6.5         chromote_0.5.1      hms_1.1.3           scales_1.4.0        minqa_1.2.8        
+[71] globals_0.18.0      xtable_1.8-4        glue_1.8.0          tools_4.5.0         webshot2_0.1.2     
+[76] data.table_1.17.8   egg_0.4.5           ggsignif_0.6.4      fs_1.6.6            mvtnorm_1.3-3      
+[81] grid_4.5.0          rbibutils_2.3       datawizard_1.2.0    nlme_3.1-168        performance_0.15.0 
+[86] Formula_1.2-5       cli_3.6.5           textshaping_1.0.1   gtable_0.3.6        rstatix_1.1.0      
+[91] sass_0.4.10         digest_0.6.37       pbkrtest_0.5.4      farver_2.1.2        htmltools_0.5.8.1  
+[96] lifecycle_1.0.5     bit64_4.6.0-1       MASS_7.3-65        
 \end{verbatim}
 
 \phantomsection\label{refs}

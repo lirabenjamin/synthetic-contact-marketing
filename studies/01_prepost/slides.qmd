@@ -3,7 +3,7 @@ title: "Learning from AI Twins"
 subtitle: "Can marketers learn about consumers across the political divide?"
 author: "Benjamin Lira, Noah Castelo, Olivier Toubia, Stefano Puntoni"
 date: today
-bibliography: '../lit/references.bib'
+bibliography: '../../lit/references.bib'
 format:
   beamer:
     incremental: true
@@ -37,7 +37,7 @@ is_running_in_quarto <- function() {
 }
 
 if (is_running_in_quarto()) {
-  dat <- read_parquet("../data/processed/analysis_data.parquet")
+  dat <- read_parquet("../../data/processed/analysis_data.parquet")
 } else {
   dat <- read_parquet("./data/processed/analysis_data.parquet")
 }
@@ -67,6 +67,35 @@ warmth_long <- dat %>%
   pivot_longer(cols = c(warmth_outgroup_pre, warmth_outgroup_post), names_to = "time",
                names_pattern = "warmth_outgroup_(pre|post)", values_to = "warmth") %>%
   mutate(time = factor(time, levels = c("pre", "post")))
+
+# Pre/post bar chart: bars = means, error bars = ±1 SE.
+# Ungrouped: Pre vs. Post in gray. Grouped: groups on x, Pre (light) vs. Post (solid).
+prepost_bars <- function(df, ylab, title = NULL, group = NULL, colors = NULL,
+                         ylim = NULL, base_size = 11) {
+  df <- df %>% mutate(time = factor(time, levels = c("pre", "post"), labels = c("Pre", "Post")))
+  dodge <- position_dodge(width = 0.75)
+  if (is.null(group)) {
+    p <- ggplot(df, aes(x = time, y = mean_val, fill = time)) +
+      geom_col(width = 0.6) +
+      geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.15) +
+      scale_fill_manual(values = c(Pre = "gray70", Post = "gray30"), guide = "none")
+  } else {
+    p <- ggplot(df, aes(x = .data[[group]], y = mean_val, fill = .data[[group]], alpha = time)) +
+      geom_col(position = dodge, width = 0.7) +
+      geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val, group = time),
+                    position = dodge, width = 0.15, alpha = 1) +
+      scale_fill_manual(values = colors, guide = "none") +
+      scale_alpha_manual(values = c(Pre = 0.35, Post = 1), name = NULL) +
+      guides(alpha = guide_legend(override.aes = list(fill = "gray30")))
+  }
+  p +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    coord_cartesian(ylim = ylim) +
+    labs(title = title, x = NULL, y = ylab) +
+    theme_minimal(base_size = base_size) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5),
+          panel.grid.major.x = element_blank(), legend.position = "bottom")
+}
 
 # Sample sizes
 n_dr <- dat %>% filter(learner_party == "D->R") %>% nrow()
@@ -368,7 +397,7 @@ ggplot(warmth_baseline, aes(x = participant_party, y = mean_warmth, fill = parti
 ## The Intervention: 10-Minute AI Conversation
 
 \begin{center}
-\includegraphics[height=0.65\textheight]{../materials/qualtrics/screenshots/chatbot.png}
+\includegraphics[height=0.65\textheight]{../../materials/qualtrics/screenshots/chatbot.png}
 
 \small
 Participants had a 10-minute conversation with an AI chatbot representing their political outgroup's perspective on environmental issues.
@@ -398,27 +427,16 @@ accuracy_model0 <- lmer(error ~ time + (1 | ResponseId), data = accuracy_long)
 warmth_model0 <- lmer(warmth ~ time + (1 | ResponseId), data = warmth_long)
 
 acc_d <- -cohens_d(error ~ time, data = accuracy_long, pooled_sd = FALSE)$Cohens_d
-warmth_d <- cohens_d(warmth ~ time, data = warmth_long, pooled_sd = FALSE)$Cohens_d
+warmth_d <- -cohens_d(warmth ~ time, data = warmth_long, pooled_sd = FALSE)$Cohens_d
 
-p_acc <- ggplot(accuracy_summary, aes(x = time, y = mean_val)) +
-  geom_line(group = 1, linewidth = 1.5, color = "gray30") +
-  geom_point(size = 5, color = "gray30") +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1, color = "gray30") +
-  labs(title = paste0("Belief Accuracy (d = ", sprintf("%.2f", acc_d), ")"),
-       x = NULL, y = "Accuracy\n(higher = more accurate)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+p_acc <- prepost_bars(accuracy_summary %>% mutate(mean_val = -mean_val),
+                      ylab = "Misperception\n(absolute error, lower = better)",
+                      title = paste0("Belief Accuracy (d = ", sprintf("%.2f", acc_d), ")"),
+                      base_size = 12)
 
-p_warmth <- ggplot(warmth_summary, aes(x = time, y = mean_val)) +
-  geom_line(group = 1, linewidth = 1.5, color = "gray30") +
-  geom_point(size = 5, color = "gray30") +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1, color = "gray30") +
-  labs(title = paste0("Outgroup Warmth (d = ", sprintf("%.2f", warmth_d), ")"),
-       x = NULL, y = "Feeling Thermometer (0-100)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+p_warmth <- prepost_bars(warmth_summary, ylab = "Feeling Thermometer (0-100)",
+                         title = paste0("Outgroup Warmth (d = ", sprintf("%.2f", warmth_d), ")"),
+                         base_size = 12)
 
 p_acc + p_warmth
 ```
@@ -450,30 +468,19 @@ warmth_model <- lmer(warmth ~ time * learner_party + (1 | ResponseId), data = wa
 # Calculate effect sizes by party
 acc_dr_d <- -cohens_d(error ~ time, data = accuracy_long %>% filter(learner_party == "D->R"), pooled_sd = FALSE)$Cohens_d
 acc_rd_d <- -cohens_d(error ~ time, data = accuracy_long %>% filter(learner_party == "R->D"), pooled_sd = FALSE)$Cohens_d
-warmth_dr_d <- cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "D->R"), pooled_sd = FALSE)$Cohens_d
-warmth_rd_d <- cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "R->D"), pooled_sd = FALSE)$Cohens_d
+warmth_dr_d <- -cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "D->R"), pooled_sd = FALSE)$Cohens_d
+warmth_rd_d <- -cohens_d(warmth ~ time, data = warmth_long %>% filter(learner_party == "R->D"), pooled_sd = FALSE)$Cohens_d
 
-p_acc <- ggplot(accuracy_summary_party, aes(x = time, y = mean_val, color = learner_party, group = learner_party)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
-  scale_color_manual(values = learner_party_colors, name = NULL) +
-  labs(title = paste0("Belief Accuracy\n(D->R: d=", sprintf("%.2f", acc_dr_d), ", R->D: d=", sprintf("%.2f", acc_rd_d), ")"),
-       x = NULL, y = "Accuracy (higher = better)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5, size = 10))
+p_acc <- prepost_bars(accuracy_summary_party %>% mutate(mean_val = -mean_val),
+                      ylab = "Misperception (lower = better)",
+                      title = paste0("Belief Accuracy\n(D->R: d=", sprintf("%.2f", acc_dr_d), ", R->D: d=", sprintf("%.2f", acc_rd_d), ")"),
+                      group = "learner_party", colors = learner_party_colors) +
+  theme(plot.title = element_text(size = 10))
 
-p_warmth <- ggplot(warmth_summary_party, aes(x = time, y = mean_val, color = learner_party, group = learner_party)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
-  scale_color_manual(values = learner_party_colors, name = NULL) +
-  labs(title = paste0("Outgroup Warmth\n(D->R: d=", sprintf("%.2f", warmth_dr_d), ", R->D: d=", sprintf("%.2f", warmth_rd_d), ")"),
-       x = NULL, y = "Feeling Thermometer (0-100)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5, size = 10))
+p_warmth <- prepost_bars(warmth_summary_party, ylab = "Feeling Thermometer (0-100)",
+                         title = paste0("Outgroup Warmth\n(D->R: d=", sprintf("%.2f", warmth_dr_d), ", R->D: d=", sprintf("%.2f", warmth_rd_d), ")"),
+                         group = "learner_party", colors = learner_party_colors) +
+  theme(plot.title = element_text(size = 10))
 
 p_acc + p_warmth + plot_layout(guides = "collect") & theme(legend.position = "bottom")
 ```
@@ -535,25 +542,13 @@ warmth_ext_summary <- warmth_long_ext %>%
             se_val = sd(warmth, na.rm = TRUE) / sqrt(n()),
             .groups = "drop")
 
-p_acc <- ggplot(acc_ext_summary, aes(x = time, y = mean_val, color = extremism_group, group = extremism_group)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
-  scale_color_manual(values = extremism_colors, name = NULL) +
-  labs(title = "Belief Accuracy", x = NULL, y = "Accuracy (higher = better)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5))
+p_acc <- prepost_bars(acc_ext_summary %>% mutate(mean_val = -mean_val),
+                      ylab = "Misperception (lower = better)", title = "Belief Accuracy",
+                      group = "extremism_group", colors = extremism_colors)
 
-p_warmth <- ggplot(warmth_ext_summary, aes(x = time, y = mean_val, color = extremism_group, group = extremism_group)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val), width = 0.1) +
-  scale_color_manual(values = extremism_colors, name = NULL) +
-  labs(title = "Outgroup Warmth", x = NULL, y = "Feeling Thermometer (0-100)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5))
+p_warmth <- prepost_bars(warmth_ext_summary, ylab = "Feeling Thermometer (0-100)",
+                         title = "Outgroup Warmth",
+                         group = "extremism_group", colors = extremism_colors)
 
 p_acc + p_warmth + plot_layout(guides = "collect") & theme(legend.position = "bottom")
 ```
@@ -623,7 +618,7 @@ Mixed results: More engagement associated with accuracy gains only for Democrats
 
 ## Confidence Changes
 
-```{r confidence, fig.height=3.5, fig.width=5}
+```{r confidence, fig.height=2.8, fig.width=5}
 confidence_long <- dat %>%
   select(ResponseId, learner_party, confidence_outgroup_pre, confidence_outgroup_post) %>%
   pivot_longer(cols = c(confidence_outgroup_pre, confidence_outgroup_post),
@@ -633,19 +628,13 @@ confidence_long <- dat %>%
 
 confidence_summary <- confidence_long %>%
   group_by(learner_party, time) %>%
-  summarise(mean_conf = mean(confidence, na.rm = TRUE),
-            se_conf = sd(confidence, na.rm = TRUE) / sqrt(n()),
+  summarise(mean_val = mean(confidence, na.rm = TRUE),
+            se_val = sd(confidence, na.rm = TRUE) / sqrt(n()),
             .groups = "drop")
 
-ggplot(confidence_summary, aes(x = time, y = mean_conf, color = learner_party, group = learner_party)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 4) +
-  geom_errorbar(aes(ymin = mean_conf - se_conf, ymax = mean_conf + se_conf), width = 0.1) +
-  scale_color_manual(values = learner_party_colors, name = NULL) +
-  labs(x = NULL, y = "Confidence in Outgroup Judgments (1-5)") +
-  scale_x_discrete(labels = c("Pre", "Post")) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom")
+prepost_bars(confidence_summary, ylab = "Confidence in\nOutgroup Judgments (1-5)",
+             group = "learner_party", colors = learner_party_colors,
+             ylim = c(1, 5), base_size = 12)
 ```
 
 \small

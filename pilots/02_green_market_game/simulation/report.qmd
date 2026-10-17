@@ -1,0 +1,443 @@
+---
+title: "Green Market Game: Synthetic Pilot"
+subtitle: "Can simulated agents learn which markets pay off?"
+format:
+  html:
+    self-contained: true
+    toc: true
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(patchwork)
+
+theme_set(
+  theme_minimal(base_size = 13) +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+)
+
+DIFF_COLORS <- c(easy = "#22c55e", medium = "#f59e0b", hard = "#ef4444")
+MARKET_COLORS <- c(
+  harlan = "#dc2626", williamson = "#f97316",
+  burlington = "#3b82f6", middlesex = "#1d4ed8"
+)
+MARKET_LABELS <- c(
+  harlan = "Harlan (78% R)", williamson = "Williamson (72% R)",
+  burlington = "Burlington (68% D)", middlesex = "Middlesex (72% D)"
+)
+
+rounds <- read_csv("round_data.csv", show_col_types = FALSE) |>
+  mutate(difficulty = factor(difficulty, levels = c("easy", "medium", "hard")))
+agents <- read_csv("agent_data.csv", show_col_types = FALSE) |>
+  mutate(difficulty = factor(difficulty, levels = c("easy", "medium", "hard")))
+```
+
+## Overview
+
+This synthetic experiment simulates 60 agents (20 per difficulty condition) playing the Green Market Game. Agents **do not know the payoff structure**. They start with prior beliefs about which markets are good for eco-friendly products, observe revenue feedback each round, and update allocations via simple reinforcement learning.
+
+**Key question:** Do agents learn that Republican-leaning markets (Harlan, Williamson) outperform Democrat-leaning markets (Burlington, Middlesex) due to lower competition — even though Democrats have higher base receptivity to eco-products?
+
+### Agent characteristics
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `political_lean` | -1 to +1 | Strong D to Strong R |
+| `eco_bias` | 0.1–0.95 | Prior that D-markets are better for eco products |
+| `learning_rate` | 0.1–0.6 | Speed of updating from ROI feedback |
+| `exploration` | 0.05–0.25 | Noise in allocation decisions |
+
+### How difficulty conditions differ
+
+The three conditions vary three parameters that jointly control how informative each round's feedback is:
+
+| Parameter | Easy | Medium | Hard |
+|-----------|------|--------|------|
+| S-curve halfMax | 25,000 | 30,000 | 35,000 |
+| Competition steepness (K) | 1.5 | 2.0 | 2.5 |
+| Revenue noise (SD multiplier) | 0.20 | 0.30 | 0.35 |
+
+Higher K compresses the revenue gap between markets. Higher noise makes round-to-round feedback less reliable. Higher halfMax means you need more money in a market before the S-curve kicks in.
+
+## The payoff surface: Why difficulty matters
+
+Before looking at learning, it helps to understand what agents are trying to learn. The optimal allocation is 100% to R-leaning markets in all conditions, but the **penalty for being wrong differs dramatically**.
+
+```{r fig-payoff-surface, fig.width=8, fig.height=4}
+#| fig-cap: "Revenue as % of optimal at different R-market budget shares. The easy surface is flat: even a 50/50 split gets 95% of optimal. The hard surface is steep: 50/50 only gets 78%."
+
+# Payoff function (matching JS)
+s_curve <- function(a, hm) (a^2) / (a^2 + hm^2)
+exp_rev <- function(rS, dS, mkt, comp, alloc, halfMax, K) {
+  if (alloc <= 0) return(0)
+  r <- mkt * (rS * 0.65 + dS * 0.75)
+  r * s_curve(alloc, halfMax) * exp(-K * comp) * 7
+}
+
+towns <- tibble(
+  id = c("harlan", "williamson", "burlington", "middlesex"),
+  rS = c(0.78, 0.72, 0.32, 0.28),
+  dS = c(0.22, 0.28, 0.68, 0.72),
+  mkt = c(50000, 75000, 45000, 65000),
+  comp = c(0.20, 0.35, 0.45, 0.85)
+)
+
+diffs <- tibble(
+  difficulty = c("easy", "medium", "hard"),
+  halfMax = c(25000, 30000, 35000),
+  K = c(1.5, 2.0, 2.5)
+)
+
+# Compute optimal for each difficulty
+get_optimal_rev <- function(halfMax, K) {
+  # Brute force over R-share from 0 to 100%
+  best <- 0
+  for (r_share in seq(0, 1, by = 0.01)) {
+    r_budget <- 100000 * r_share
+    d_budget <- 100000 * (1 - r_share)
+    # Split within R (40/60 harlan/williamson) and D (40/60 burlington/middlesex)
+    # Actually let's optimize the within-split too
+    best_inner <- 0
+    for (h_frac in seq(0.1, 0.9, by = 0.1)) {
+      for (b_frac in seq(0.1, 0.9, by = 0.1)) {
+        allocs <- c(r_budget * h_frac, r_budget * (1 - h_frac),
+                     d_budget * b_frac, d_budget * (1 - b_frac))
+        total <- sum(pmap_dbl(
+          list(towns$rS, towns$dS, towns$mkt, towns$comp, allocs),
+          \(rS, dS, mkt, comp, a) exp_rev(rS, dS, mkt, comp, a, halfMax, K)
+        ))
+        if (total > best_inner) best_inner <- total
+      }
+    }
+    if (best_inner > best) best <- best_inner
+  }
+  best
+}
+
+surface_data <- expand_grid(
+  difficulty = c("easy", "medium", "hard"),
+  r_share = seq(0.1, 0.95, by = 0.05)
+) |>
+  left_join(diffs, by = "difficulty") |>
+  rowwise() |>
+  mutate(
+    r_budget = 100000 * r_share,
+    d_budget = 100000 * (1 - r_share),
+    # Use 40/60 split within R, 40/60 within D
+    revenue = sum(
+      exp_rev(0.78, 0.22, 50000, 0.20, r_budget * 0.4, halfMax, K),
+      exp_rev(0.72, 0.28, 75000, 0.35, r_budget * 0.6, halfMax, K),
+      exp_rev(0.32, 0.68, 45000, 0.45, d_budget * 0.4, halfMax, K),
+      exp_rev(0.28, 0.72, 65000, 0.85, d_budget * 0.6, halfMax, K)
+    )
+  ) |>
+  ungroup() |>
+  group_by(difficulty) |>
+  mutate(pct_optimal = revenue / max(revenue) * 100) |>
+  ungroup() |>
+  mutate(difficulty = factor(difficulty, levels = c("easy", "medium", "hard")))
+
+surface_data |>
+  ggplot(aes(x = r_share * 100, y = pct_optimal, color = difficulty)) +
+  geom_line(linewidth = 1.5) +
+  geom_vline(xintercept = 50, linetype = "dashed", color = "grey60", linewidth = 0.5) +
+  annotate("text", x = 52, y = 62, label = "50/50 split", hjust = 0,
+           color = "grey40", size = 3) +
+  scale_color_manual(values = DIFF_COLORS) +
+  scale_x_continuous(breaks = seq(10, 90, 20)) +
+  labs(
+    x = "% of budget to R-leaning markets",
+    y = "% of maximum possible revenue",
+    color = "Difficulty"
+  )
+```
+
+This is the core insight for calibration: **easy mode has a flat payoff surface** where even naive allocations perform well, while **hard mode punishes misallocation severely**, creating a steeper learning gradient.
+
+## Do agents learn?
+
+### Belief shift: Pre vs. post allocation to R-markets
+
+```{r fig-belief-shift, fig.width=8, fig.height=4}
+#| fig-cap: "Pre vs. post game allocation to R-leaning markets by difficulty condition"
+
+p1 <- agents |>
+  pivot_longer(cols = c(pre_pct_R, post_pct_R),
+               names_to = "time", values_to = "pct_R") |>
+  mutate(time = factor(time, levels = c("pre_pct_R", "post_pct_R"),
+                        labels = c("Pre-game", "Post-game"))) |>
+  ggplot(aes(x = time, y = pct_R, group = agent_id, color = difficulty)) +
+  geom_line(alpha = 0.4, linewidth = 0.5) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  stat_summary(aes(group = difficulty), fun = mean, geom = "line",
+               linewidth = 2, alpha = 0.9) +
+  stat_summary(aes(group = difficulty), fun = mean, geom = "point",
+               size = 4) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "grey50") +
+  facet_wrap(~difficulty) +
+  scale_color_manual(values = DIFF_COLORS, guide = "none") +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = NULL, y = "% of budget to R-leaning markets") +
+  theme(panel.spacing = unit(1, "lines"))
+
+p2 <- agents |>
+  ggplot(aes(x = difficulty, y = belief_shift, fill = difficulty)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 1.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_fill_manual(values = DIFF_COLORS, guide = "none") +
+  labs(x = "Difficulty", y = "Belief shift (pp)")
+
+p1 + p2 + plot_layout(widths = c(2, 1))
+```
+
+```{r belief-shift-stats}
+agents |>
+  group_by(difficulty) |>
+  summarize(
+    n = n(),
+    mean_shift = mean(belief_shift),
+    sd_shift = sd(belief_shift),
+    t_stat = mean(belief_shift) / (sd(belief_shift) / sqrt(n())),
+    p_value = 2 * pt(-abs(t_stat), df = n() - 1),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 3))) |>
+  knitr::kable(caption = "One-sample t-test: belief shift different from 0")
+```
+
+### Convergence speed: Round-by-round % of optimal
+
+This is the key diagnostic for calibrating difficulty. Each line shows one agent's round-level performance as a fraction of the theoretical maximum for their condition.
+
+```{r fig-convergence, fig.width=9, fig.height=5}
+#| fig-cap: "Round-by-round revenue as % of condition-specific optimal. Easy agents start high and plateau; hard agents start low but show steeper improvement."
+
+# Need per-round optimal revenue for each difficulty
+optimal_per_round <- tibble(
+  difficulty = c("easy", "medium", "hard"),
+  halfMax = c(25000, 30000, 35000),
+  K = c(1.5, 2.0, 2.5)
+) |>
+  rowwise() |>
+  mutate(
+    opt_rev = {
+      # Greedy optimal (same logic as Python)
+      alloc <- setNames(rep(0, 4), towns$id)
+      for (i in 1:20) {
+        gains <- pmap_dbl(
+          list(towns$rS, towns$dS, towns$mkt, towns$comp),
+          \(rS, dS, mkt, comp) {
+            exp_rev(rS, dS, mkt, comp, alloc[towns$id[towns$rS == rS & towns$mkt == mkt]] + 5000, halfMax, K) -
+            exp_rev(rS, dS, mkt, comp, alloc[towns$id[towns$rS == rS & towns$mkt == mkt]], halfMax, K)
+          }
+        )
+        best <- which.max(gains)
+        alloc[best] <- alloc[best] + 5000
+      }
+      sum(pmap_dbl(
+        list(towns$rS, towns$dS, towns$mkt, towns$comp, as.numeric(alloc)),
+        \(rS, dS, mkt, comp, a) exp_rev(rS, dS, mkt, comp, a, halfMax, K)
+      ))
+    }
+  ) |>
+  ungroup() |>
+  select(difficulty, opt_rev) |>
+  mutate(difficulty = factor(difficulty, levels = c("easy", "medium", "hard")))
+
+rounds_pct <- rounds |>
+  left_join(optimal_per_round, by = "difficulty") |>
+  mutate(pct_opt_round = round_revenue / opt_rev * 100)
+
+# Spaghetti + mean
+rounds_pct |>
+  ggplot(aes(x = round, y = pct_opt_round)) +
+  geom_line(aes(group = agent_id), alpha = 0.15, linewidth = 0.3) +
+  stat_summary(aes(color = difficulty), fun = mean, geom = "line", linewidth = 1.5) +
+  stat_summary(aes(color = difficulty), fun = mean, geom = "point", size = 2.5) +
+  facet_wrap(~difficulty) +
+  scale_color_manual(values = DIFF_COLORS, guide = "none") +
+  scale_x_continuous(breaks = 1:10) +
+  scale_y_continuous(limits = c(0, 130)) +
+  geom_hline(yintercept = 100, linetype = "dashed", color = "grey50") +
+  labs(x = "Round", y = "Revenue as % of optimal")
+```
+
+```{r convergence-stats}
+# Improvement from first 2 rounds to last 2 rounds
+rounds_pct |>
+  mutate(phase = case_when(
+    round <= 2 ~ "early",
+    round >= 9 ~ "late",
+    TRUE ~ "middle"
+  )) |>
+  filter(phase != "middle") |>
+  group_by(difficulty, agent_id, phase) |>
+  summarize(mean_pct = mean(pct_opt_round), .groups = "drop") |>
+  pivot_wider(names_from = phase, values_from = mean_pct) |>
+  mutate(improvement = late - early) |>
+  group_by(difficulty) |>
+  summarize(
+    `Early % optimal` = round(mean(early), 1),
+    `Late % optimal` = round(mean(late), 1),
+    `Improvement (pp)` = round(mean(improvement), 1),
+    `SD improvement` = round(sd(improvement), 1),
+    t = round(mean(improvement) / (sd(improvement) / sqrt(n())), 2),
+    p = round(2 * pt(-abs(t), df = n() - 1), 4),
+    .groups = "drop"
+  ) |>
+  knitr::kable(caption = "Early (rounds 1–2) vs. late (rounds 9–10) performance")
+```
+
+### Allocation trajectories
+
+```{r fig-allocation-trajectory, fig.width=9, fig.height=5}
+#| fig-cap: "Mean allocation to each market across rounds by difficulty"
+
+rounds_long <- rounds |>
+  select(agent_id, difficulty, round,
+         alloc_harlan, alloc_williamson, alloc_burlington, alloc_middlesex) |>
+  pivot_longer(cols = starts_with("alloc_"),
+               names_prefix = "alloc_",
+               names_to = "market", values_to = "allocation")
+
+rounds_long |>
+  group_by(difficulty, round, market) |>
+  summarize(mean_alloc = mean(allocation), .groups = "drop") |>
+  mutate(market_label = MARKET_LABELS[market]) |>
+  ggplot(aes(x = round, y = mean_alloc / 1000, color = market_label)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  facet_wrap(~difficulty) +
+  scale_color_manual(values = setNames(MARKET_COLORS, MARKET_LABELS)) +
+  scale_x_continuous(breaks = 1:10) +
+  labs(x = "Round", y = "Mean allocation ($k)", color = NULL)
+```
+
+### Revenue learning curves
+
+```{r fig-revenue-curves, fig.width=8, fig.height=4}
+#| fig-cap: "Mean round revenue over time by difficulty"
+
+rounds |>
+  group_by(difficulty, round) |>
+  summarize(
+    mean_rev = mean(round_revenue),
+    se_rev = sd(round_revenue) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = round, y = mean_rev / 1000, color = difficulty, fill = difficulty)) +
+  geom_ribbon(aes(ymin = (mean_rev - 1.96 * se_rev) / 1000,
+                  ymax = (mean_rev + 1.96 * se_rev) / 1000),
+              alpha = 0.15, color = NA) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_color_manual(values = DIFF_COLORS) +
+  scale_fill_manual(values = DIFF_COLORS) +
+  scale_x_continuous(breaks = 1:10) +
+  labs(x = "Round", y = "Mean revenue ($k)", color = "Difficulty", fill = "Difficulty")
+```
+
+## Performance
+
+### Total revenue and % of optimal
+
+```{r fig-performance, fig.width=8, fig.height=4}
+#| fig-cap: "Agent performance by condition. % of optimal now properly differentiates conditions (fixed optimizer bug)."
+
+p1 <- agents |>
+  ggplot(aes(x = difficulty, y = total_revenue / 1e6, fill = difficulty)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 1.5) +
+  scale_fill_manual(values = DIFF_COLORS, guide = "none") +
+  labs(x = "Difficulty", y = "Total revenue ($M)")
+
+p2 <- agents |>
+  ggplot(aes(x = difficulty, y = pct_optimal, fill = difficulty)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 1.5) +
+  scale_fill_manual(values = DIFF_COLORS, guide = "none") +
+  labs(x = "Difficulty", y = "% of optimal revenue")
+
+p1 + p2
+```
+
+## Who learns more?
+
+### Eco-bias predicts starting point but not ceiling
+
+```{r fig-bias-learning, fig.width=8, fig.height=4}
+#| fig-cap: "Initial eco-bias vs. belief shift and performance"
+
+p1 <- agents |>
+  ggplot(aes(x = eco_bias, y = belief_shift, color = difficulty)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.8) +
+  scale_color_manual(values = DIFF_COLORS) +
+  labs(x = "Initial eco-bias (prior for D-markets)",
+       y = "Belief shift (pp toward R)", color = "Difficulty")
+
+p2 <- agents |>
+  ggplot(aes(x = learning_rate, y = belief_shift, color = difficulty)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.8) +
+  scale_color_manual(values = DIFF_COLORS) +
+  labs(x = "Learning rate", y = "Belief shift (pp toward R)", color = "Difficulty")
+
+p1 + p2 + plot_layout(guides = "collect")
+```
+
+### Political lean and learning
+
+```{r fig-political-learning, fig.width=6, fig.height=4}
+#| fig-cap: "Political lean vs. belief shift"
+
+agents |>
+  ggplot(aes(x = political_lean, y = belief_shift, color = difficulty)) +
+  geom_point(alpha = 0.7, size = 2.5) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.15, linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = DIFF_COLORS) +
+  labs(x = "Political lean (-1 = Strong D, +1 = Strong R)",
+       y = "Belief shift (pp toward R)", color = "Difficulty")
+```
+
+## Summary
+
+```{r summary-table}
+agents |>
+  group_by(difficulty) |>
+  summarize(
+    n = n(),
+    `Mean pre % R` = mean(pre_pct_R),
+    `Mean post % R` = mean(post_pct_R),
+    `Mean shift (pp)` = mean(belief_shift),
+    `Mean revenue ($M)` = mean(total_revenue / 1e6),
+    `Mean % optimal` = mean(pct_optimal),
+    .groups = "drop"
+  ) |>
+  mutate(across(where(is.numeric), \(x) round(x, 1))) |>
+  knitr::kable()
+```
+
+### Takeaways for the real pilot
+
+1. **Agents learn across all conditions.** Budget shifts 27–32 pp toward R-leaning markets. With n = 20 per cell, all shifts are highly significant. Real humans with n = 50 per cell will have ample power.
+
+2. **Difficulty conditions now properly differentiate.** After fixing the optimizer, % of optimal tracks difficulty as expected: easy (83%) > medium (79%) > hard (72%).
+
+3. **The key difference is convergence shape, not direction.**
+   - **Easy:** Agents start near-optimal (flat payoff surface) and plateau by round 3–4. Risk: real humans may disengage because there is nothing left to learn.
+   - **Medium:** Steady improvement across all 10 rounds. Best learning curve shape for a 10-round game.
+   - **Hard:** Steep initial climb, still improving at round 10. Risk: high noise may feel frustrating — real humans might attribute bad outcomes to randomness rather than their strategy.
+
+4. **Recommendation: run all three conditions** at n = 50 each (150 total) and use post-game experience measures (difficulty, engagement, frustration) to identify which condition produces the best learning-to-frustration ratio. The simulation suggests medium is the sweet spot, but human engagement patterns may differ from reinforcement learners.

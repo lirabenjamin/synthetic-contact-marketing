@@ -42,9 +42,9 @@ clean:
 	rm -f data/processed/analysis_data.csv
 	rm -f output/extreme_cases.csv
 	rm -f output/extreme_cases_summary.md
-	rm -f analysis/report.html
-	rm -f analysis/report.pdf
-	rm -f analysis/slides.pdf
+	rm -f studies/01_prepost/report.html
+	rm -f studies/01_prepost/report.pdf
+	rm -f studies/01_prepost/slides.pdf
 	@echo "Clean complete!"
 
 # Step 0: Download raw Qualtrics data
@@ -110,47 +110,58 @@ analysis: analysis-data extreme-cases
 	@echo "✓ All analyses complete"
 
 # Step 7: Render HTML report
-report-html: analysis/report.html
+report-html: studies/01_prepost/report.html
 
-analysis/report.html: analysis/report.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
+studies/01_prepost/report.html: studies/01_prepost/report.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
 	@echo "Step 7: Rendering HTML report..."
-	cd analysis && quarto render report.qmd --to html
-	@echo "✓ HTML report generated: analysis/report.html"
+	cd studies/01_prepost && quarto render report.qmd --to html
+	@echo "✓ HTML report generated: studies/01_prepost/report.html"
 
 # Step 8: Render PDF report
-report-pdf: analysis/report.pdf
+report-pdf: studies/01_prepost/report.pdf
 
-analysis/report.pdf: analysis/report.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
+studies/01_prepost/report.pdf: studies/01_prepost/report.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
 	@echo "Step 8: Rendering PDF report..."
-	cd analysis && quarto render report.qmd --to pdf
-	@echo "✓ PDF report generated: analysis/report.pdf"
+	cd studies/01_prepost && quarto render report.qmd --to pdf
+	@echo "✓ PDF report generated: studies/01_prepost/report.pdf"
 
 # Render both reports
 report: report-html report-pdf
 	@echo "✓ All reports generated"
 	@echo ""
-	@echo "  - HTML: analysis/report.html"
-	@echo "  - PDF:  analysis/report.pdf"
+	@echo "  - HTML: studies/01_prepost/report.html"
+	@echo "  - PDF:  studies/01_prepost/report.pdf"
 
 # Step 9: Render presentation slides
-slides: analysis/slides.pdf
+slides: studies/01_prepost/slides.pdf
 
-analysis/slides.pdf: analysis/slides.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
+studies/01_prepost/slides.pdf: studies/01_prepost/slides.qmd data/processed/cleaned_data.parquet data/processed/conversation_metrics.parquet
 	@echo "Step 9: Rendering presentation slides..."
-	cd analysis && quarto render slides.qmd --to beamer
-	@echo "✓ Slides generated: analysis/slides.pdf"
+	cd studies/01_prepost && quarto render slides.qmd --to beamer
+	@echo "✓ Slides generated: studies/01_prepost/slides.pdf"
 
 # Sync HTML reports into docs/ for GitHub Pages
-docs: analysis/report.html
+docs: studies/01_prepost/report.html
 	@echo "Syncing reports to docs/ for GitHub Pages..."
-	cp analysis/report.html docs/s1-report.html
-	cp "t2 new dv pilot/code.html" docs/p2-pilot.html
-	cp "t2 new dv pilot/t3 experiment pilot/code.html" docs/p2-conditions.html
+	cp "studies/01_prepost/report.html" docs/s1-report.html
+	cp "pilots/01_behavioral/code.html" docs/p2-pilot.html
+	cp "pilots/01_behavioral/t3 experiment pilot/code.html" docs/p2-conditions.html
 	cp studies/README.md docs/registry.md
 	@echo "✓ docs/ updated — push to deploy"
 
 # Development: quick HTML-only render (faster for iteration)
 dev: data
 	@echo "Development mode: HTML report only..."
-	cd analysis && quarto render report.qmd --to html
-	@echo "✓ Development report ready: analysis/report.html"
+	cd studies/01_prepost && quarto render report.qmd --to html
+	@echo "✓ Development report ready: studies/01_prepost/report.html"
+
+# Marketing brief: three studies (political, age, allocation game) + job talk figures
+.PHONY: game-data brief
+game-data:
+	Rscript src/r/pull_game_data.R
+
+brief: data/processed/game_single_round.parquet
+	quarto render paper/marketing_brief/brief.qmd
+
+data/processed/game_single_round.parquet:
+	Rscript src/r/pull_game_data.R

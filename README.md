@@ -8,19 +8,26 @@ This study tests whether interacting with AI chatbots prompted to represent poli
 
 ```
 .
+├── studies/
+│   ├── 01_prepost/             # twins1 (P3263): Pre-post study (N=500)
+│   │   ├── report.qmd          # Main analysis + narrative
+│   │   └── slides.qmd          # Presentation slides
+│   └── 02_experimental/        # Marketing experiment
+├── pilots/
+│   ├── 01_behavioral/          # twins2 (P3306): 3-condition behavioral pilot (failed)
+│   └── 02_green_market_game/   # Green market game pilot
 ├── data/
 │   ├── raw/                    # Immutable raw data
 │   └── processed/              # Cleaned and processed datasets
 ├── src/
 │   ├── r/                      # R scripts for data processing
 │   └── python/                 # Python scripts for data download
-├── analysis/
-│   └── report.qmd              # Main analysis and narrative
 ├── output/
 │   ├── figures/                # Generated plots
 │   └── tables/                 # Generated tables
+├── paper/                      # Manuscript drafts
+├── lit/                        # Papers and references
 └── Makefile                    # Reproducible pipeline
-
 ```
 
 ## Quick Start
@@ -93,7 +100,7 @@ All analyses are fully reproducible:
 1. **Raw data**: `data/raw/qualtrics.parquet` (immutable)
 2. **Data processing**: `src/r/clean_data.R`
 3. **Conversation download**: `src/python/download_conversations.py`
-4. **Analysis**: `analysis/report.qmd`
+4. **Analysis**: `studies/01_prepost/report.qmd`
 5. **Publication dataset**: `data/processed/analysis_data.{parquet,csv}`
 
 Run `make all` to reproduce the entire analysis from raw data to final report.

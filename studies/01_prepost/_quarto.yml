@@ -7,4 +7,4 @@ format:
     embed-resources: true
   pdf:
     toc: true
-bibliography: references.bib
+bibliography: ../../lit/references.bib
