@@ -32,3 +32,6 @@ __pycache__/
 # Quarto
 .quarto/
 venv/
+
+# Internal analyses (not part of replication package until they go into a paper)
+internal_checks/
