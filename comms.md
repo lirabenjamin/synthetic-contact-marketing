@@ -1,5 +1,81 @@
 # Comms
 
+## 2026-11-03 06:35 — Adaptive pilot built; three decisions before launch
+
+BenBen, the system and dashboard are built on branch `bo-pilot` (issue #21): https://claude.ai/artifact/FBbFBVaNong6azPYbpt4Q7. Reply per item.
+
+**1. Is adaptive sampling worth it at N = 120?** I ran 30 simulated launches. The adaptive loop's final pick reaches 74% of the best setting's true learning, and plain random knobs reach 74% too. Adaptive leads by about 5 points between 50 and 80 people, then random catches up. One person's score scatters with SD ≈ 15 points around their setting's true average, while the averages span about 38 points, and the surface is smooth. (a) Keep the adaptive loop; it costs nothing extra once built. (b) Use random knobs for everyone and fit the GP once at the end. That is simpler, the analysis is cleaner, and it has no drift confound.
+
+**2. The outcome measure.** The straight-line slope of distance-to-best-split penalizes fast learners in long games. At SNR 4 and α 0.8, simulated players score 36 points at 6 rounds and 18 points at 13 rounds, although they learn just as much. They finish learning by round 2, and the line spreads that gain over every round. So the GP's best pick is a short game (6 to 8 rounds), and that choice comes from the measure, not from the players. (a) Keep the slope. (b) Switch to round 1 minus the mean of the last 3 rounds. (c) Switch to a fitted exponential learning curve.
+
+**3. The GP drives toward high SNR and high α.** Cleaner feedback and a steeper payoff always help learning, so the optimizer will take both as far as their ranges allow. That's fine for pilot 1, but once feedback is that clean, learning finishes by round 2 and leaves little room for the persona to shape the prior. Should the objective cap SNR, or target a learning level such as 50% of the gap closed by the last round?
+
+## 2026-11-02 12:50 — Senior-twin politics check: waiting on Noah
+
+BenBen, the real Study 2 twin chats were never saved to Qualtrics. The only possible copy is in Noah's Google Apps Script proxy (`script.google.com/macros/s/AKfycbxU…/exec`), if it logs requests. Questions for Noah: (1) does the proxy log requests anywhere, (2) which OpenAI model does it call? Paco will email you Tue 11/3 at 9:00 ET as a reminder. The job can't see whether Noah replied, so if he already did, ignore it.
+
+## 2026-11-01 22:30 — Intro/Discussion enrichment from arXiv 2607.02181 + overlap audit (needs your approval)
+
+BenBen, nothing below is in coedit yet. Reply per item (keep / edit / drop).
+Refs come from gensci `submissions/06_science_advances/source/refs.bib`. † = DOI from memory; check it before citing.
+
+### Introduction
+**I1. How big and systematic the errors are.** Goes after "Democrats, for example, underestimate the environmental concern of Republicans."
+> These errors are large and systematic. Partisans misjudge who makes up the other party (Ahler & Sood, 2018), and Americans underestimate public support for climate policy by nearly half (Sparkman et al., 2022; Van Boven et al., 2018). On green consumption, Democrats place the average Republican more than one standard deviation from the true value. That gap is enough to recast a mildly supportive consumer as an opposed one (Lira et al., 2026).
+
+**I2. Where we sit among silicon-sample and digital-twin papers.** Goes after the definition of the digital twin.
+> Researchers already use language models to stand in for consumers. Models can reproduce the survey answers of demographic subgroups (Argyle et al., 2023†), and agents built from interviews or 500-question surveys can mimic specific people (Park et al., 2024; Toubia et al., 2025). This work asks whether the model answers like a human. We ask whether a human who talks with the model learns something true about the segment.
+
+Also: update `toubia2025twin` in references.bib from the arXiv version to the *Marketing Science* version (doi:10.1287/mksc.2025.0262).
+
+**I3. Why twins might beat personas, and why they might not.** Sets up the twin-vs-persona and typicality results.
+> Generic personas carry a known risk. Language models reflect the opinions of some groups more than others (Santurkar et al., 2023) and lean pro-environmental (Hartmann et al., 2023). In earlier work, a GPT persona of a Republican held more extreme environmental views than real Republicans did, yet it still sat closer to the truth than Democrats' own estimates (Lira et al., 2026). A digital twin anchors the persona in one real person's answers, which should remove the model's slant. It also adds a new source of error: the person behind the twin may be atypical of the group.
+
+**I4. What the arXiv paper established and what this paper adds.** This is the main differentiation paragraph.
+> A chat with an AI outgroup member can correct partisan beliefs. Lira et al. (2026) found that a ten-minute conversation with a chatbot playing a typical Republican made Democrats more accurate about Republicans' environmental attitudes. That work targeted affective polarization and left four questions open for marketers. First, its accuracy evidence came from a pre-post design with no control group. Second, it tested only generic personas. Third, it studied only a political outgroup. Fourth, its behavioral outcome was the choice to talk with a real outpartisan, and it did not test a business decision. We randomize participants to a persona, a twin, or a control bot. We add a non-political segment (seniors), test which twins teach best, and measure ad predictions and budget allocation.
+
+### Discussion
+**D1. Tie typicality to the information mechanism.** Goes after "Twins helped more when the real person behind the twin was typical of the group."
+> This pattern supports an informational account of learning from AI personas. Human contact reduces prejudice mainly through lower anxiety and more empathy, and knowledge plays a smaller role (Pettigrew & Tropp, 2008†). Outgroup chatbots differ from control chatbots mainly in the stereotype-disconfirming content they deliver (Lira et al., 2026). A twin teaches only as much accurate information as it carries.
+
+**D2. A cost-based implication for managers.** Goes after the equivalence-test sentence.
+> This result matters for managers. A generic persona costs one prompt, while a twin requires a 500-question survey of a real person (Toubia et al., 2025). For learning about a segment's average, our data give no reason to pay the extra cost. A firm that uses twins should pick twins near the center of the segment.
+
+**D3. A durability and acceptance limit.** The limits paragraph would go from four limits to five.
+> Fifth, we measured accuracy right after the chat. Most of the warmth gain from a single outgroup chat fades within a week (Lira et al., 2026), and the persistence of accuracy gains remains untested. Repetition is cheap, however. People forgo money to avoid opposing views (Frimer et al., 2017), yet they accept an AI outgroup partner far more readily than a human one (Lira et al., 2026).
+
+New refs: Ahler & Sood 2018 JOP 10.1086/697253; Sparkman et al. 2022 Nat Comms 10.1038/s41467-022-32412-y; Van Boven et al. 2018 PPS 10.1177/1745691617748966; Argyle et al. 2023 Pol Analysis†; Park et al. 2024 arXiv:2411.10109; Santurkar et al. 2023 ICML arXiv:2303.17548; Hartmann et al. 2023 arXiv:2301.01768; Pettigrew & Tropp 2008 EJSP†; Frimer et al. 2017 JESP 10.1016/j.jesp.2017.04.003; Lira et al. 2026 arXiv:2607.02181. references.bib holds only Toubia 2025.
+
+### Overlap audit vs arXiv 2607.02181
+| Claim in the marketing paper | Overlap |
+|---|---|
+| Democrats underestimate Republicans' green concern | High |
+| A 10-minute outgroup chat cuts misperception (Study 1, persona arm) | High. Same finding; we add a randomized control |
+| Persona prompt + pet-topic control bot | High (method) |
+| "Typical outgroup member" GREEN estimate scored against panel truth | High (method) |
+| Democrat-only sample, environment domain | Medium |
+| Bots teach through information | Medium |
+| The chat changes a downstream choice | Low–medium (different decision) |
+| AI is a cheap stand-in for contact | Low |
+
+**Clearly novel here:**
+- Randomized accuracy test. The arXiv accuracy evidence is pre-post only, and that paper says so.
+- Twins vs. personas, with an equivalence test.
+- Twin typicality as a moderator.
+- Seniors as a second segment.
+- Learning about the specific twin.
+- Ad predictions and budget allocation.
+- The proposed Bayesian Study 4.
+- No warmth outcomes.
+
+**Ways to sharpen the differentiation:**
+1. Rewrite the research questions. Current Q1 is the arXiv paper's claim. Lead with: twin vs. persona? Which twins teach best? Does it extend to a non-political segment? Does it change budget allocation?
+2. Retitle Study 1 around twin vs. persona, and present persona-vs-control as a randomized replication of Lira et al. (2026).
+3. Disclose in Method that the persona prompt and control bot follow Lira et al. (2026).
+4. Give seniors and typicality more weight, since they overlap least. Consider opening the Discussion with them.
+5. Keep warmth and polarization framing out of the Introduction. Use contact theory only in D1.
+6. Check that Studies 1–3 share no participants or data files with the gensci studies. An editor may ask.
+
 ## 2026-03-24 — Game Experiment Analysis Pipeline Ready
 
 BenBen, the analysis QMD for the game experiment is at `studies/02_experimental/game_analysis.qmd`. It renders to a self-contained HTML.

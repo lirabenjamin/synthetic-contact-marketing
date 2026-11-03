@@ -1,0 +1,477 @@
+<title>Learning Game Optimizer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500&display=swap">
+<style>
+/* Layout: lab-notebook console. One scrubber pins the refit; every panel below reads from it, summary first. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --fg: #15181d; --muted: #5a6170; --line: #e1e4ea; --soft: #eef0f4;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s7: #6250d6; --good: #0f7a45; --warn: #a15c00;
+  --seq: "#e3eefc,#9ec5f4,#5598e7,#256abf,#0d366b"; --seq2: "#fdeadf,#f7b896,#eb6834,#b0461c,#6e2a10";
+  --display: "IBM Plex Serif", Georgia, serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111317; --surface: #191c21; --fg: #eceef2; --muted: #a2a9b5; --line: #2b2f37; --soft: #22262d;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s7: #9085e9; --good: #4cc38a; --warn: #e0a24a;
+  --seq: "#16243a,#184f95,#2a78d6,#6da7ec,#cde2fb"; --seq2: "#2a1a12,#6e2a10,#b0461c,#eb6834,#f7b896"; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #191c21; --fg: #eceef2; --muted: #a2a9b5; --line: #2b2f37; --soft: #22262d;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s7: #9085e9; --good: #4cc38a; --warn: #e0a24a;
+  --seq: "#16243a,#184f95,#2a78d6,#6da7ec,#cde2fb"; --seq2: "#2a1a12,#6e2a10,#b0461c,#eb6834,#f7b896"; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1 { font: 500 30px/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 17px/1.3 var(--body); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 72ch; margin: 6px 0 0; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.badge { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--mono); padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--s3); }
+.badge.live::before { background: var(--s2); }
+header { display: grid; gap: 10px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+
+/* scrubber */
+.scrub { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.scrub label { font-weight: 600; }
+.scrub input[type=range] { flex: 1 1 260px; accent-color: var(--s1); min-width: 0; }
+.scrub .pos { font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+button { font: 500 13px var(--body); color: var(--fg); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+button:hover { border-color: var(--s1); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--s1); color: #fff; border-color: var(--s1); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* status strip */
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.stat .v { font: 500 20px/1.25 var(--mono); font-variant-numeric: tabular-nums; }
+.stat .s { color: var(--muted); font-size: 13px; }
+.pill { display: inline-block; font: 500 12px var(--mono); padding: 1px 8px; border-radius: 99px; background: var(--soft); }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); }
+
+section { display: grid; gap: 12px; }
+.sec-head { display: grid; gap: 4px; }
+.sec-head p { margin: 0; color: var(--muted); max-width: 80ch; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .grid3, .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 6px; min-width: 0; }
+.panel h3 { font: 600 13px var(--body); margin: 2px 4px 0; }
+.panel .note { font-size: 12.5px; color: var(--muted); margin: 2px 4px 4px; }
+.chart { width: 100%; height: 260px; }
+.chart.tall { height: 300px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+.sw.band { height: 10px; border: 0; opacity: .35; }
+.sw.dash { border-top-style: dashed; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.seg .lab { color: var(--muted); font-size: 13px; margin-right: 6px; }
+select { font: 13px var(--mono); background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
+.callout { border-left: 3px solid var(--s2); background: var(--surface); padding: 12px 16px; border-radius: 0 8px 8px 0; display: grid; gap: 6px; }
+.callout p { margin: 0; max-width: 85ch; }
+table { border-collapse: collapse; font-size: 13px; width: 100%; }
+td, th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+details summary { cursor: pointer; font-weight: 600; }
+.kv { color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="top"><span class="eyebrow">Twins marketing · multi-round game · pilot 1</span><span id="modeBadge" class="badge">simulation</span></div>
+    <h1>Learning Game Optimizer</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="scrub" role="group" aria-label="Choose a GP refit">
+    <label for="snap">Refit</label>
+    <input id="snap" type="range" min="0" max="0" step="1" value="0">
+    <span class="pos" id="snapPos"></span>
+    <button id="play" type="button">Play</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <section>
+    <div class="sec-head">
+      <h2>What the model believes</h2>
+      <p>Each chart walks along one knob while the other two stay at the recommended setting. The blue line is the GP's best guess of average learning; the band is ±2 SD of that guess. The thin lines are three Thompson draws: plausible curves the GP cannot yet rule out. A star marks where each draw peaks. Dots are completed people at any setting, so they show scatter, not this slice.</p>
+    </div>
+    <div class="legend" id="sliceLegend"></div>
+    <div class="grid3">
+      <div class="panel"><h3>Signal-to-noise</h3><div class="chart" id="sl_snr"></div></div>
+      <div class="panel"><h3>Payoff curvature α</h3><div class="chart" id="sl_alpha"></div></div>
+      <div class="panel"><h3>Rounds</h3><div class="chart" id="sl_rounds"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Where the next person would go</h2>
+      <p>500 Thompson draws from this refit, each sent to its own peak. The bars show how often each value wins. A tall narrow peak means the GP is confident; a spread means it is still exploring. In the live run, 25% of people skip this step and get random knobs.</p>
+    </div>
+    <div class="grid3">
+      <div class="panel"><h3>Signal-to-noise</h3><div class="chart" id="pk_snr"></div></div>
+      <div class="panel"><h3>Payoff curvature α</h3><div class="chart" id="pk_alpha"></div></div>
+      <div class="panel"><h3>Rounds</h3><div class="chart" id="pk_rounds"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>The whole surface at one game length</h2>
+      <p id="heatIntro">Learning across signal-to-noise and α at a fixed number of rounds. Dots are people who played that many rounds. The star is the recommendation when it uses this game length.</p>
+    </div>
+    <div class="seg" id="roundsSeg"><span class="lab">Rounds</span></div>
+    <div class="grid3" id="heatGrid">
+      <div class="panel"><h3>GP estimate of learning</h3><div class="chart tall" id="hm_mean"></div></div>
+      <div class="panel" id="hmTruthPanel"><h3>True learning (simulation)</h3><div class="chart tall" id="hm_truth"></div></div>
+      <div class="panel"><h3>GP uncertainty (SD)</h3><div class="chart tall" id="hm_sd"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>How the search moved</h2>
+      <p>Each dot is one participant, in arrival order. Random assignments (warm-up and the 25% share) should cover the whole range. Thompson assignments should drift toward the region the GP likes. Vertical lines mark refits; faded dots arrived after the selected refit.</p>
+    </div>
+    <div class="legend"><span><i class="dot" style="background:var(--s2)"></i>Random</span><span><i class="dot" style="background:var(--s1)"></i>Thompson</span></div>
+    <div class="grid3">
+      <div class="panel"><h3>Signal-to-noise</h3><div class="chart" id="tl_snr"></div></div>
+      <div class="panel"><h3>Payoff curvature α</h3><div class="chart" id="tl_alpha"></div></div>
+      <div class="panel"><h3>Rounds</h3><div class="chart" id="tl_rounds"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>Which knobs matter: fitted length-scales</h3><p class="note">Short = learning changes fast along that knob. At the ceiling (20) = the knob makes no detectable difference.</p><div class="chart" id="ls"></div></div>
+      <div class="panel" id="recPanel"><h3>Quality of the recommendation</h3><p class="note" id="recNote"></p><div class="chart" id="recq"></div></div>
+    </div>
+  </section>
+
+  <section id="benchSec">
+    <div class="sec-head">
+      <h2>Is adaptive sampling earning its keep?</h2>
+      <p id="benchIntro"></p>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>True learning at the recommended setting, % of the best</h3><div class="chart" id="bench"></div></div>
+      <div class="callout" id="benchCallout"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Check one participant</h2>
+      <p>The outcome is the drop in each person's distance to the best split across rounds, from a straight line fitted to that distance (in percentage points of budget). Pick a person to see what the score is made of.</p>
+    </div>
+    <div class="seg"><label class="lab" for="pid">Participant</label><select id="pid"></select><button id="pidBest" type="button">Highest score</button><button id="pidWorst" type="button">Lowest score</button></div>
+    <div class="grid2">
+      <div class="panel"><h3>Budget share to the R market</h3><div class="chart" id="pt_share"></div></div>
+      <div class="panel"><h3>Distance to the best split, with fitted line</h3><div class="chart" id="pt_gap"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Settings and simulation assumptions</summary>
+      <div class="tablewrap" style="margin-top:10px"><table id="cfgTable"></table></div>
+    </details>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const R = D.run, B = D.bench, C = R.config, SIM = R.mode === "simulation";
+const KN = ["snr", "alpha", "rounds"];
+const KLAB = { snr: "Signal-to-noise", alpha: "Payoff curvature α", rounds: "Rounds" };
+const SN = R.snapshots, G = R.grid, NA = G.alpha.length, NR = G.rounds.length;
+const P = R.participants;
+const isRandom = p => p.kind !== "thompson";
+const fmt = { snr: v => v.toFixed(2), alpha: v => v.toFixed(2), rounds: v => String(Math.round(v)) };
+const minutes = r => C.minutes_base + C.minutes_per_round * r;
+let si = SN.length - 1, roundsSel = null, pidSel = null, timer = null;
+
+function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim().replace(/^"|"$/g, ""); }
+function T() {
+  return { fg: css("--fg"), muted: css("--muted"), line: css("--line"), surf: css("--surface"), soft: css("--soft"),
+    s1: css("--s1"), s2: css("--s2"), s3: css("--s3"), s7: css("--s7"),
+    seq: css("--seq").split(","), seq2: css("--seq2").split(",") };
+}
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+function scale(cols) { return cols.map((c, i) => [i / (cols.length - 1), c]); }
+function base(t, x = {}, y = {}) {
+  const ax = { gridcolor: t.line, zerolinecolor: t.line, linecolor: t.line, tickfont: { color: t.muted, size: 11 }, title: { font: { color: t.muted, size: 12 } }, automargin: true };
+  return { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: "IBM Plex Sans, system-ui, sans-serif", color: t.fg, size: 12 },
+    margin: { l: 48, r: 10, t: 10, b: 40 }, showlegend: false, hovermode: "closest",
+    hoverlabel: { bgcolor: t.surf, bordercolor: t.line, font: { color: t.fg, family: "IBM Plex Mono, monospace", size: 12 } },
+    xaxis: { ...ax, ...x, title: { ...ax.title, ...(x.title || {}) } }, yaxis: { ...ax, ...y, title: { ...ax.title, ...(y.title || {}) } } };
+}
+const CFG = { responsive: true, displayModeBar: false };
+const draw = (id, tr, lay) => Plotly.react(id, tr, lay, CFG);
+const SNR_RANGE = [Math.log10(C.snr_range[0]) - .04, Math.log10(C.snr_range[1]) + .04];
+const SNR_TICKS = [0.25, 0.5, 1, 2, 4];
+const snrAxis = { type: "log", range: SNR_RANGE, tickvals: SNR_TICKS, ticktext: SNR_TICKS.map(String), title: { text: "Signal-to-noise (log scale)" } };
+const knobAxis = k => k === "snr" ? snrAxis : { title: { text: KLAB[k] } };
+const doneBy = s => P.filter(p => p.status === "complete" && p.finished_at <= s.time + 1e-9);
+const gi = (i, j, k) => (i * NA + j) * NR + k;
+const truthBest = SIM ? R.truth.best : null;
+
+function header() {
+  const b = document.getElementById("modeBadge");
+  b.textContent = SIM ? "simulation · true surface known" : "live run";
+  b.classList.toggle("live", !SIM);
+  document.getElementById("lede").textContent = SIM
+    ? `A simulated launch of ${P.length} people with the planned rules: ${C.n_init} random warm-up assignments, then Thompson sampling with ${Math.round(C.p_random * 100)}% random, refitting after every ${C.refit_every} completions. The simulated players follow known rules, so every panel can compare what the GP believes with the truth.`
+    : `The live pilot so far: ${P.length} people assigned. Warm-up of ${C.n_init} random assignments, then Thompson sampling with ${Math.round(C.p_random * 100)}% random, refitting after every ${C.refit_every} completions.`;
+  if (!SIM) { document.getElementById("hmTruthPanel").hidden = true; document.getElementById("heatGrid").className = "grid2"; }
+  const el = document.getElementById("snap"); el.max = SN.length - 1; el.value = si;
+}
+
+function status() {
+  const s = SN[si], r = s.recommend, done = doneBy(s);
+  const nR = P.filter(p => p.started_at <= s.time && isRandom(p)).length, nT = P.filter(p => p.started_at <= s.time && !isRandom(p)).length;
+  let cells = [
+    ["Recommended setting", `SNR ${fmt.snr(r.snr)} · α ${fmt.alpha(r.alpha)} · ${r.rounds} rds`, `${minutes(r.rounds).toFixed(1)} min per person (cap ${C.minutes_cap})`],
+    ["GP prediction there", `${s.rec_pred.toFixed(1)} pts`, `average gap closed, ± ${(2 * s.slices.rounds.sd[s.slices.rounds.x.indexOf(r.rounds)]).toFixed(1)} (2 SD)`],
+  ];
+  if (SIM) {
+    const pct = s.rec_true / truthBest.value, cls = pct >= .85 ? "good" : "warn";
+    cells.push(["True learning there", `${s.rec_true.toFixed(1)} pts <span class="pill ${cls}">${Math.round(100 * pct)}% of best</span>`,
+      `best feasible: ${truthBest.value.toFixed(1)} at SNR ${fmt.snr(truthBest.snr)} · α ${fmt.alpha(truthBest.alpha)} · ${truthBest.rounds} rds`]);
+  }
+  cells.push(["People", `${done.length} done / ${C.n_max} cap`, `${nR} random · ${nT} Thompson assigned by this refit`]);
+  document.getElementById("status").innerHTML = cells.map(c => `<div class="stat"><span class="eyebrow">${c[0]}</span><span class="v">${c[1]}</span><span class="s">${c[2]}</span></div>`).join("");
+  document.getElementById("snapPos").textContent = `${si + 1} of ${SN.length} · after ${s.n} completed`;
+}
+
+function slices(t) {
+  const s = SN[si], cols = [t.s2, t.s3, t.s7], done = doneBy(s);
+  document.getElementById("sliceLegend").innerHTML =
+    `<span><i class="sw" style="border-color:${t.s1}"></i>GP mean</span><span><i class="sw band" style="background:${t.s1}"></i>±2 SD</span>` +
+    `<span><i class="sw" style="border-color:${t.s2}"></i><i class="sw" style="border-color:${t.s3}"></i><i class="sw" style="border-color:${t.s7}"></i>Thompson draws</span>` +
+    (SIM ? `<span><i class="sw dash" style="border-color:${t.fg}"></i>Truth</span>` : "") +
+    `<span><i class="dot" style="background:${t.muted};opacity:.5"></i>People</span>`;
+  for (const k of KN) {
+    const d = s.slices[k], x = d.x;
+    const up = d.mean.map((m, i) => m + 2 * d.sd[i]), lo = d.mean.map((m, i) => m - 2 * d.sd[i]);
+    const tr = [
+      { x, y: up, mode: "lines", line: { width: 0 }, hoverinfo: "skip" },
+      { x, y: lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: rgba(t.s1, .16), hoverinfo: "skip" },
+      { x: done.map(p => p[k]), y: done.map(p => p.score), mode: "markers", marker: { size: 6, color: rgba(t.muted.startsWith("#") ? t.muted : "#888888", .35) },
+        hovertemplate: `${KLAB[k]} %{x:.2f}<br>score %{y:.1f}<extra></extra>` },
+    ];
+    d.draws.forEach((y, j) => {
+      let im = y.indexOf(Math.max(...y));
+      tr.push({ x, y, mode: "lines", line: { color: cols[j], width: 1.2 }, hoverinfo: "skip" });
+      tr.push({ x: [x[im]], y: [y[im]], mode: "markers", marker: { symbol: "star", size: 13, color: cols[j], line: { color: t.surf, width: 1.5 } },
+        hovertemplate: `draw ${j + 1} peaks at %{x:.2f}<extra></extra>` });
+    });
+    if (SIM) tr.push({ x, y: d.truth, mode: "lines", line: { color: t.fg, width: 1.5, dash: "dash" }, hovertemplate: `truth %{y:.1f}<extra></extra>` });
+    tr.push({ x, y: d.mean, mode: "lines", line: { color: t.s1, width: 2.5 }, hovertemplate: `${KLAB[k]} %{x:.2f}<br>GP mean %{y:.1f}<extra></extra>` });
+    const shapes = [{ type: "line", x0: s.recommend[k], x1: s.recommend[k], yref: "paper", y0: 0, y1: 1, line: { color: t.muted, width: 1, dash: "dot" } }];
+    if (k === "rounds" && R.max_rounds < C.rounds_range[1])
+      shapes.push({ type: "rect", x0: R.max_rounds + .5, x1: C.rounds_range[1] + .5, yref: "paper", y0: 0, y1: 1, fillcolor: rgba(t.s2, .08), line: { width: 0 } });
+    const all = [...up, ...lo, ...(SIM ? d.truth : [])];
+    const lay = base(t, { ...knobAxis(k), ...(k === "rounds" ? { dtick: 1, range: [C.rounds_range[0] - .5, C.rounds_range[1] + .5] } : {}) },
+      { title: { text: "Learning (pts)" }, range: [Math.min(...all, -5) - 3, Math.max(...all) + 3] });
+    lay.shapes = shapes;
+    if (k === "rounds" && R.max_rounds < C.rounds_range[1])
+      lay.annotations = [{ x: (R.max_rounds + 1 + C.rounds_range[1]) / 2, yref: "paper", y: .97, text: "over time cap", showarrow: false, font: { size: 11, color: t.muted } }];
+    draw("sl_" + k, tr, lay);
+  }
+}
+
+function picks(t) {
+  const s = SN[si];
+  for (const k of KN) {
+    const v = s.picks[k], n = v.length;
+    let xs, ys, widths;
+    if (k === "rounds") {
+      xs = G.rounds; ys = xs.map(r => 100 * v.filter(x => x === r).length / n);
+    } else {
+      const lo = k === "snr" ? Math.log(C.snr_range[0]) : C.alpha_range[0], hi = k === "snr" ? Math.log(C.snr_range[1]) : C.alpha_range[1];
+      const nb = 14, w = (hi - lo) / nb, cnt = new Array(nb).fill(0);
+      v.forEach(x => { const z = k === "snr" ? Math.log(x) : x; cnt[Math.min(nb - 1, Math.floor((z - lo) / w))]++; });
+      const mids = cnt.map((_, i) => lo + (i + .5) * w);
+      xs = k === "snr" ? mids.map(Math.exp) : mids; ys = cnt.map(c => 100 * c / n);
+      if (k === "alpha") widths = xs.map(() => w * .86);
+    }
+    const tr = [{ type: "bar", x: xs, y: ys, width: widths, marker: { color: t.s1, line: { width: 0 } }, hovertemplate: `${KLAB[k]} ≈ %{x:.2f}<br>%{y:.0f}% of draws<extra></extra>` }];
+    const lay = base(t, { ...knobAxis(k), ...(k === "rounds" ? { dtick: 1 } : {}) }, { title: { text: "% of draws" }, rangemode: "tozero" });
+    lay.bargap = k === "snr" ? .15 : .12;
+    lay.shapes = [{ type: "line", x0: s.recommend[k], x1: s.recommend[k], yref: "paper", y0: 0, y1: 1, line: { color: t.fg, width: 1, dash: "dot" } }];
+    lay.annotations = [{ x: s.recommend[k], yref: "paper", y: 1, text: "GP best", showarrow: false, yanchor: "bottom", font: { size: 11, color: t.muted }, xref: "x" }];
+    lay.margin.t = 18;
+    draw("pk_" + k, tr, lay);
+  }
+}
+
+function roundsButtons() {
+  const seg = document.getElementById("roundsSeg");
+  G.rounds.forEach(r => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = r; b.dataset.r = r;
+    if (r > R.max_rounds) b.title = "Over the time cap";
+    b.addEventListener("click", () => { roundsSel = r; heat(T()); });
+    seg.appendChild(b);
+  });
+}
+
+function heat(t) {
+  const s = SN[si], r = roundsSel ?? s.recommend.rounds, k = G.rounds.indexOf(r);
+  document.querySelectorAll("#roundsSeg button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.r === r)));
+  const Z = src => G.alpha.map((_, j) => G.snr.map((_, i) => src[gi(i, j, k)]));
+  const zm = Z(s.grid_mean), zs = Z(s.grid_sd), zt = SIM ? Z(R.truth.grid) : null;
+  const all = [...s.grid_mean, ...(SIM ? R.truth.grid : [])];
+  const zmin = Math.min(...all), zmax = Math.max(...all);
+  const done = doneBy(s).filter(p => p.rounds === r);
+  const dots = { x: done.map(p => p.snr), y: done.map(p => p.alpha), mode: "markers", type: "scatter",
+    marker: { size: 7, color: t.surf, line: { color: t.fg, width: 1 } }, hovertemplate: "SNR %{x:.2f} · α %{y:.2f}<extra>person</extra>" };
+  const star = s.recommend.rounds === r ? [{ x: [s.recommend.snr], y: [s.recommend.alpha], mode: "markers", type: "scatter",
+    marker: { symbol: "star", size: 16, color: t.s2, line: { color: t.surf, width: 1.5 } }, hovertemplate: "recommendation<extra></extra>" }] : [];
+  const hm = (z, cols, lo, hi, lab) => ({ type: "heatmap", x: G.snr, y: G.alpha, z, zmin: lo, zmax: hi, colorscale: scale(cols), zsmooth: "best",
+    colorbar: { thickness: 10, len: .9, outlinewidth: 0, tickfont: { color: t.muted, size: 10 } }, hovertemplate: `SNR %{x:.2f} · α %{y:.2f}<br>${lab} %{z:.1f}<extra></extra>` });
+  const lay = () => base(t, { ...snrAxis }, { title: { text: "α" } });
+  draw("hm_mean", [hm(zm, t.seq, zmin, zmax, "GP mean"), dots, ...star], lay());
+  if (SIM) draw("hm_truth", [hm(zt, t.seq, zmin, zmax, "truth"), dots, ...star], lay());
+  draw("hm_sd", [hm(zs, t.seq2, Math.min(...s.grid_sd), Math.max(...s.grid_sd), "SD"), dots, ...star], lay());
+  document.getElementById("heatIntro").textContent = `Learning across signal-to-noise and α at ${r} rounds (${minutes(r).toFixed(1)} min${r > R.max_rounds ? ", over the time cap" : ""}). Dots are people who played ${r} rounds by this refit. ${SIM ? "The GP and truth panels share one color scale. " : ""}The star is the recommendation when it uses this game length.`;
+}
+
+function timeline(t) {
+  const s = SN[si];
+  const order = P.map((p, i) => ({ ...p, i: i + 1 }));
+  const refitAt = SN.map(z => P.filter(p => p.started_at <= z.time).length + .5);
+  for (const k of KN) {
+    const tr = [false, true].map(th => {
+      const pts = order.filter(p => isRandom(p) !== th);
+      return { x: pts.map(p => p.i), y: pts.map(p => p[k]), mode: "markers", type: "scatter",
+        marker: { size: 7, color: th ? t.s1 : t.s2, opacity: pts.map(p => p.started_at <= s.time ? .95 : .18), line: { color: t.surf, width: 1 } },
+        hovertemplate: `#%{x} · ${KLAB[k]} %{y:.2f}<extra>${th ? "Thompson" : "Random"}</extra>` };
+    });
+    const lay = base(t, { title: { text: "Arrival order" } }, { ...knobAxis(k), title: { text: KLAB[k] }, ...(k === "rounds" ? { dtick: 3 } : {}) });
+    lay.shapes = refitAt.map((x, j) => ({ type: "line", x0: x, x1: x, yref: "paper", y0: 0, y1: 1, line: { color: j === si ? t.fg : t.line, width: j === si ? 1.5 : 1 } }));
+    draw("tl_" + k, tr, lay);
+  }
+}
+
+function lengthScales(t) {
+  const cols = [t.s1, t.s2, t.s3], ns = SN.map(s => s.n);
+  const tr = KN.map((k, j) => ({ x: ns, y: SN.map(s => s.hyper.length_scales[j]), mode: "lines+markers", line: { color: cols[j], width: 2 }, marker: { size: 8, color: cols[j], line: { color: t.surf, width: 1.5 } }, name: KLAB[k],
+    hovertemplate: `${KLAB[k]}<br>n = %{x}: %{y:.2f}<extra></extra>` }));
+  const lay = base(t, { title: { text: "Completed people" } }, { type: "log", title: { text: "Length-scale (share of knob range)" }, range: [Math.log10(.12), Math.log10(30)] });
+  lay.showlegend = true; lay.legend = { orientation: "h", y: 1.12, x: 0, font: { color: t.muted, size: 12 } }; lay.margin.t = 30;
+  lay.shapes = [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 20, y1: 20, line: { color: t.muted, dash: "dash", width: 1 } },
+                { type: "line", x0: SN[si].n, x1: SN[si].n, yref: "paper", y0: 0, y1: 1, line: { color: t.fg, width: 1, dash: "dot" } }];
+  draw("ls", tr, lay);
+}
+
+function recQuality(t) {
+  const ns = SN.map(s => s.n);
+  const tr = [{ x: ns, y: SN.map(s => s.rec_pred), mode: "lines+markers", line: { color: t.s1, width: 2 }, marker: { size: 8, color: t.s1, line: { color: t.surf, width: 1.5 } }, hovertemplate: "n = %{x}<br>GP predicts %{y:.1f}<extra></extra>" }];
+  let note = "What the GP predicts at its own pick.";
+  if (SIM) {
+    tr.push({ x: ns, y: SN.map(s => s.rec_true), mode: "lines+markers", line: { color: t.fg, width: 2, dash: "dash" }, marker: { size: 8, color: t.fg, line: { color: t.surf, width: 1.5 } }, hovertemplate: "n = %{x}<br>true value %{y:.1f}<extra></extra>" });
+    note = `Blue: what the GP predicts at its own pick. Dashed: the true value there. The gap between them is optimism, the usual winner's curse of picking the maximum of a noisy estimate. Top line: the best feasible value (${truthBest.value.toFixed(1)}).`;
+  }
+  document.getElementById("recNote").textContent = note;
+  const lay = base(t, { title: { text: "Completed people" } }, { title: { text: "Learning (pts)" } });
+  lay.shapes = [{ type: "line", x0: SN[si].n, x1: SN[si].n, yref: "paper", y0: 0, y1: 1, line: { color: t.fg, width: 1, dash: "dot" } }];
+  if (SIM) lay.shapes.push({ type: "line", xref: "paper", x0: 0, x1: 1, y0: truthBest.value, y1: truthBest.value, line: { color: t.s3, width: 1.5 } });
+  draw("recq", tr, lay);
+}
+
+function bench(t) {
+  if (!B) { document.getElementById("benchSec").hidden = true; return; }
+  const a = B.adaptive, r = B.random, pct = x => Math.round(100 * x);
+  document.getElementById("benchIntro").textContent = `The same simulated launch, repeated ${B.seeds} times with fresh people, under two policies: the adaptive loop, and plain random knobs for everyone. Both use the same GP and the same final pick, so any gap comes from where people were placed.`;
+  const line = (d, c, name) => ({ x: d.by_n.map(z => z.n), y: d.by_n.map(z => 100 * z.mean), name, mode: "lines+markers", line: { color: c, width: 2 },
+    marker: { size: 7, color: c, line: { color: t.surf, width: 1.5 } }, error_y: { type: "data", array: d.by_n.map(z => 100 * z.se), color: c, thickness: 1.2, width: 3 },
+    hovertemplate: `${name}<br>n = %{x}: %{y:.0f}% of best<extra></extra>` });
+  const lay = base(t, { title: { text: "Completed people" } }, { title: { text: "% of best (mean ± SE)" } });
+  lay.showlegend = true; lay.legend = { orientation: "h", y: 1.12, x: 0, font: { color: t.muted, size: 12 } }; lay.margin.t = 30;
+  draw("bench", [line(a, t.s1, "Adaptive (planned)"), line(r, t.s2, "All random")], lay);
+  const diff = a.final_mean - r.final_mean;
+  document.getElementById("benchCallout").innerHTML =
+    `<span class="eyebrow">Read this before launch</span>` +
+    `<p>At ${C.n_max} people, the adaptive pick reaches <b>${pct(a.final_mean)}%</b> of the best setting (SE ${pct(a.final_se)}), and the random design reaches <b>${pct(r.final_mean)}%</b> (SE ${pct(r.final_se)}). ${Math.abs(diff) < 0.04 ? "Under these simulated players, adaptive sampling does not find a better design by the end." : diff > 0 ? "Adaptive sampling finds a better design." : "Random assignment does as well or better."}</p>` +
+    `<p>One person's score is mostly noise: scores scatter around the true average for their setting with SD ${noiseSD().toFixed(0)} points, while the true average spans ${truthRange().toFixed(0)} points across all allowed settings. The true surface is also smooth, so random coverage already maps it. Adaptive sampling pays off when the good region is small and easy to miss.</p>` +
+    `<p>The simulated players are assumptions. If real people learn very differently, this comparison changes too.</p>`;
+}
+
+function noiseSD() {
+  const r = P.filter(p => p.status === "complete").map(p => p.score - p.true_mean), m = r.reduce((a, b) => a + b) / r.length;
+  return Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1));
+}
+function truthRange() {
+  const v = R.truth.grid.filter((_, idx) => G.rounds[idx % NR] <= R.max_rounds);
+  return Math.max(...v) - Math.min(...v);
+}
+
+function participantsList() {
+  const s = SN[si], done = doneBy(s), sel = document.getElementById("pid");
+  sel.innerHTML = done.map(p => `<option value="${p.pid}">${p.pid} · SNR ${fmt.snr(p.snr)} · α ${fmt.alpha(p.alpha)} · ${p.rounds} rds · score ${p.score.toFixed(1)}</option>`).join("");
+  if (!done.some(p => p.pid === pidSel)) pidSel = done.length ? done[done.length - 1].pid : null;
+  sel.value = pidSel;
+}
+
+function participant(t) {
+  const p = P.find(q => q.pid === pidSel); if (!p) return;
+  const rd = p.shares.map((_, i) => i + 1), sh = p.shares.map(x => 100 * x), bs = 100 * p.best_share;
+  const gap = sh.map(x => Math.abs(x - bs)), n = gap.length, tb = (n + 1) / 2;
+  const mg = gap.reduce((a, b) => a + b) / n, b = rd.reduce((a, r, i) => a + (r - tb) * gap[i], 0) / rd.reduce((a, r) => a + (r - tb) ** 2, 0);
+  const fit = rd.map(r => mg + b * (r - tb));
+  const lay1 = base(t, { title: { text: "Round" }, dtick: 1 }, { title: { text: "% of budget to R" }, range: [0, 100] });
+  lay1.shapes = [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: bs, y1: bs, line: { color: t.s3, width: 2, dash: "dash" } }];
+  lay1.annotations = [{ xref: "paper", x: 1, y: bs, text: `best split ${bs.toFixed(0)}%`, showarrow: false, xanchor: "right", yanchor: "bottom", font: { size: 11, color: t.muted } }];
+  draw("pt_share", [{ x: rd, y: sh, mode: "lines+markers", line: { color: t.s1, width: 2 }, marker: { size: 8, color: t.s1, line: { color: t.surf, width: 1.5 } }, hovertemplate: "round %{x}: %{y:.0f}%<extra></extra>" }], lay1);
+  const lay2 = base(t, { title: { text: "Round" }, dtick: 1 }, { title: { text: "Distance to best split (pts)" }, rangemode: "tozero" });
+  lay2.annotations = [{ xref: "paper", yref: "paper", x: 1, y: 1, xanchor: "right", yanchor: "top", showarrow: false, align: "right",
+    text: `fitted drop, round 1 to ${n}: <b>${p.score.toFixed(1)} pts</b>`, font: { size: 12, color: t.fg } }];
+  draw("pt_gap", [
+    { x: rd, y: gap, mode: "markers", marker: { size: 8, color: t.s2, line: { color: t.surf, width: 1.5 } }, hovertemplate: "round %{x}: %{y:.0f} pts<extra></extra>" },
+    { x: rd, y: fit, mode: "lines", line: { color: t.fg, width: 1.5 }, hoverinfo: "skip" }], lay2);
+}
+
+function cfgTable() {
+  const rows = [
+    ["Knob ranges", `SNR ${C.snr_range[0]}–${C.snr_range[1]} (log scale) · α ${C.alpha_range[0]}–${C.alpha_range[1]} · rounds ${C.rounds_range[0]}–${C.rounds_range[1]}`],
+    ["Signal-to-noise", `true gap log(R pay / D pay) = ${C.delta}, divided by the SD of each round's log-revenue noise`],
+    ["Payoff", "revenue in each market ∝ (budget share)^α × noise; best share to R = 1 / (1 + exp(−gap / (1 − α)))"],
+    ["Time cap", `${C.minutes_base} min + ${C.minutes_per_round} min per round ≤ ${C.minutes_cap} min, so at most ${R.max_rounds} rounds`],
+    ["Search policy", `${C.n_init} random warm-up; then Thompson sampling over ${C.n_candidates} candidate settings, ${Math.round(C.p_random * 100)}% random; refit every ${C.refit_every} completions; ${C.queue_size} assignments kept queued; cap ${C.n_max} people`],
+    ["GP", "Matérn 5/2 with one length-scale per knob (knobs scaled to 0–1) + white noise ≥ 30% of outcome variance; recommendation = highest posterior mean"],
+    ["Outcome", C.outcome === "pp" ? "drop in fitted distance to the best split, round 1 to last round (percentage points)" : "share of the round-1 distance closed by the last round"],
+  ];
+  if (SIM) Object.entries(R.truth.assumptions).forEach(([k, v]) => rows.push(["Simulated players: " + k.toLowerCase(), v]));
+  document.getElementById("cfgTable").innerHTML = rows.map(r => `<tr><th scope="row">${r[0]}</th><td>${r[1]}</td></tr>`).join("");
+}
+
+function renderAll() {
+  const t = T();
+  status(); slices(t); picks(t); heat(t); timeline(t); lengthScales(t); recQuality(t); bench(t); participantsList(); participant(t);
+}
+
+header(); roundsButtons(); cfgTable(); renderAll();
+document.getElementById("snap").addEventListener("input", e => { si = +e.target.value; roundsSel = null; renderAll(); });
+document.getElementById("pid").addEventListener("change", e => { pidSel = e.target.value; participant(T()); });
+function pickBy(dir) { const d = doneBy(SN[si]); if (!d.length) return; pidSel = d.reduce((a, b) => (dir * (b.score - a.score) > 0 ? b : a)).pid; document.getElementById("pid").value = pidSel; participant(T()); }
+document.getElementById("pidBest").addEventListener("click", () => pickBy(1));
+document.getElementById("pidWorst").addEventListener("click", () => pickBy(-1));
+document.getElementById("play").addEventListener("click", e => {
+  if (timer) { clearInterval(timer); timer = null; e.target.textContent = "Play"; return; }
+  e.target.textContent = "Pause"; if (si === SN.length - 1) si = -1;
+  timer = setInterval(() => {
+    si++; document.getElementById("snap").value = si; roundsSel = null; renderAll();
+    if (si >= SN.length - 1) { clearInterval(timer); timer = null; e.target.textContent = "Play"; }
+  }, 1400);
+});
+const rerender = () => renderAll();
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
+new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
