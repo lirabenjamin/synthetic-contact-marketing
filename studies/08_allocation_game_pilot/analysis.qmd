@@ -1,0 +1,361 @@
+---
+title: "Allocation-game pilot (Prolific, Nov 2026)"
+subtitle: "Democrats split a $100k budget between Riverton (R) and Lakewood (D) after chatting with a Republican persona bot or a cats-vs-dogs control bot"
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    fig-cap-location: bottom
+    tbl-cap-location: top
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(jsonlite)
+library(knitr)
+
+knitr::opts_chunk$set(dpi = 150, fig.width = 8, fig.height = 4.5)
+options(knitr.kable.NA = "–")
+theme_set(theme_minimal(base_size = 12) + theme(panel.grid.minor = element_blank()))
+
+PROC <- "data/processed"
+pull_log <- fromJSON("data/pull_log.json")
+
+# Game parameters (survey-app src/lib/gameEngine.js, tag v2.1.0-allocation-game-pilot)
+BUDGET <- 1e5; ALPHA <- 0.5; DELTA <- 1
+W_R <- exp(DELTA / 2); W_D <- exp(-DELTA / 2)      # 1.65 and 0.61
+OPT_SHARE <- 1 / (1 + exp(-DELTA / (1 - ALPHA)))    # 0.881
+N_ROUNDS <- 10; PAID_MIN <- 10
+GRID <- seq(0.10, 0.90, by = 0.05)
+exp_rev <- function(s) BUDGET * (W_R * s^ALPHA + W_D * (1 - s)^ALPHA)
+REV_EVEN <- exp_rev(0.5); REV_BEST <- max(exp_rev(GRID)); BEST_GRID <- GRID[which.max(exp_rev(GRID))]
+round_bonus <- function(s) 0.1 * pmin(1, pmax(0, (exp_rev(s) - REV_EVEN) / (REV_BEST - REV_EVEN)))
+
+COND_COLORS <- c(control = "#9ca3af", treatment = "#2563eb")
+COND_LABELS <- c(control = "Control (cats-vs-dogs bot)", treatment = "Treatment (Republican persona bot)")
+
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+mins <- function(ms) ms / 60000
+
+pull_time <- ymd_hms(pull_log$pulled_at)
+parts <- read_csv(file.path(PROC, "participants.csv"), show_col_types = FALSE) |>
+  mutate(across(c(started_at, completed_at, game_finished_at, starts_with("ts_")), ymd_hms),
+         completed = !is.na(completed_at))
+rounds <- read_csv(file.path(PROC, "rounds.csv"), show_col_types = FALSE)
+screen <- read_csv(file.path(PROC, "screenouts.csv"), show_col_types = FALSE)
+chats <- read_csv(file.path(PROC, "chat_messages.csv"), show_col_types = FALSE)
+errors <- read_csv(file.path(PROC, "client_errors.csv"), show_col_types = FALSE)
+```
+
+## Snapshot
+
+Data pulled `r format(with_tz(pull_time, "America/New_York"), "%Y-%m-%d %H:%M %Z")` from MongoDB `twins-allocation-game` (participants, screenouts, client_errors) and the chatbot's Postgres log. `r pull_log$test_records_excluded` test record(s) were dropped (Prolific ID starting with `TEST_`/`test_`, or `test = true`). The `testing` collection is never read.
+
+**Design.** Democrats who pass screening are assigned to one of two 5-minute chats: a Republican persona bot (treatment) or a bot that debates cats vs dogs (control). They then play 10 rounds of a budget game for SunCell solar panels. Each round they choose `share_R`, the share of a $100,000 budget spent in Riverton County (Republican-leaning); the rest goes to Lakewood County (Democratic-leaning). Expected revenue is $100{,}000\,[1.65\,s^{0.5} + 0.61\,(1-s)^{0.5}]$, with a random luck term each round. Expected revenue peaks at `share_R` = `r fmt(OPT_SHARE)`; the best split a player can choose on the slider (10%–90% in 5% steps) is `r fmt(BEST_GRID)`. The bonus pays up to $0.10 per round for moving from a 50/50 split toward the best split, so a 50/50 player earns $0 and a player who always chooses the best split earns $1.00.
+
+**This is a pilot of about 20 people. Every condition comparison below is underpowered and descriptive.** Its purpose is to check that the flow, the data and the game work.
+
+## 1. Flow and timing
+
+```{r flow}
+assigned <- parts |> filter(!orphan)
+in_progress <- assigned |> filter(!completed, started_at > pull_time - minutes(30))
+reason_counts <- screen |> separate_longer_delim(reasons, ";") |> count(reasons)
+flow_tbl <- bind_rows(
+  tibble(Step = "Reached the screening questions (any record)", Total = nrow(assigned) + nrow(screen),
+         Treatment = NA, Control = NA),
+  tibble(Step = "Screened out (before assignment)", Total = nrow(screen), Treatment = NA, Control = NA),
+  tibble(Step = paste0("    reason: ", reason_counts$reasons), Total = reason_counts$n, Treatment = NA, Control = NA),
+  assigned |> summarise(Step = "Passed screening and assigned", Total = n(),
+                        Treatment = sum(condition == "treatment"), Control = sum(condition == "control")),
+  assigned |> filter(completed) |>
+    summarise(Step = "Completed", Total = n(),
+              Treatment = sum(condition == "treatment"), Control = sum(condition == "control")),
+  in_progress |> summarise(Step = "Not completed, started < 30 min before pull (likely in progress)", Total = n(),
+                           Treatment = sum(condition == "treatment"), Control = sum(condition == "control")),
+  assigned |> filter(!completed, !participant_id %in% in_progress$participant_id) |>
+    summarise(Step = "Not completed, started >= 30 min before pull (likely abandoned)", Total = n(),
+              Treatment = sum(condition == "treatment"), Control = sum(condition == "control"))
+)
+n_done_or_quit <- nrow(assigned) - nrow(in_progress)
+completion_rate <- if (n_done_or_quit > 0) sum(assigned$completed) / n_done_or_quit else NA
+kable(flow_tbl, caption = "Participant flow (counts of people). Screening happens before randomization, so screen-outs have no condition.")
+```
+
+People who close the study before the party-strength screen leave no record in the database (the app first writes at screen-out or at assignment), so Prolific's own counts of returns and timeouts are the source for drop-off before screening. Every record here passed the consent screen.
+
+**Completion rate:** `r sum(assigned$completed)` of the `r n_done_or_quit` assigned participants who are no longer in progress completed the study (`r if (is.na(completion_rate)) "n/a" else paste0(round(100 * completion_rate), "%")`).
+
+```{r timing}
+screens <- c("attention_math", "cover_story", "attention_animal", "party_id", "extremity",
+             "chat_intro", "chatbot", "game_tutorial", "game", "demographics")
+screen_labels <- c("Math check", "Cover story", "Animal check", "Party ID", "Party strength",
+                   "Chat intro", "Chat (5 min)", "Game tutorial", "Game (10 rounds)", "Demographics")
+ts_long <- assigned |>
+  select(participant_id, condition, completed_at, any_of(paste0("ts_", screens))) |>
+  pivot_longer(starts_with("ts_"), names_to = "screen", names_prefix = "ts_", values_to = "t") |>
+  mutate(screen = factor(screen, levels = screens)) |>
+  arrange(participant_id, screen) |>
+  group_by(participant_id) |>
+  mutate(t_next = lead(t), t_next = if_else(screen == "demographics", completed_at, t_next),
+         minutes = as.numeric(difftime(t_next, t, units = "mins"))) |>
+  ungroup() |> filter(!is.na(minutes))
+
+done <- assigned |> filter(completed) |>
+  mutate(total_min = mins(bot_timing_ms),
+         from_math_min = as.numeric(difftime(completed_at, ts_attention_math, units = "mins")))
+med_total <- median(done$total_min, na.rm = TRUE)
+```
+
+**Total time (completers, N = `r nrow(done)`):** median `r fmt(med_total, 1)` minutes from page load to submitting demographics (range `r fmt(min(done$total_min, na.rm = TRUE), 1)`–`r fmt(max(done$total_min, na.rm = TRUE), 1)`); median `r fmt(median(done$from_math_min, na.rm = TRUE), 1)` minutes from the consent click. Pay covers `r PAID_MIN` minutes. `r if (!is.na(med_total) && med_total > 1.25 * PAID_MIN) "**FLAG: the median is more than 25% over the paid time; raise the pay or shorten the study.**" else if (!is.na(med_total) && med_total > PAID_MIN) "The median runs over the paid time, but by less than 25%." else "The median is within the paid time."`
+
+```{r fig-screen-time, fig.height = 4.5}
+#| fig-cap: "Minutes per screen, all assigned participants who left that screen. Grey dots are people; the black bar is the median. Times before the chat-intro screen start at the consent click."
+ts_long |>
+  mutate(label = factor(screen_labels[as.integer(screen)], levels = rev(screen_labels))) |>
+  ggplot(aes(minutes, label)) +
+  geom_jitter(height = 0.15, width = 0, alpha = 0.5, colour = "grey40") +
+  stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", width = 0.6, colour = "black") +
+  labs(x = "Minutes on screen", y = NULL)
+```
+
+```{r tbl-screen-time}
+ts_long |> group_by(Screen = screen_labels[as.integer(screen)]) |>
+  summarise(N = n(), `Median min` = fmt(median(minutes)), `Max min` = fmt(max(minutes)), .groups = "drop") |>
+  arrange(match(Screen, screen_labels)) |>
+  kable(caption = "Minutes per screen (N = people who left the screen).")
+```
+
+## 2. Data quality
+
+```{r quality}
+chat_user <- chats |> filter(!is_system_prompt)
+chat_sum <- chat_user |>
+  group_by(participant_id) |>
+  summarise(n_msgs = sum(!is.na(message)),
+            user_words = sum(str_count(coalesce(message, ""), "\\S+")),
+            bot_words = sum(str_count(coalesce(response, ""), "\\S+")), .groups = "drop")
+bot_served <- chats |> filter(is_system_prompt) |> distinct(participant_id, bot_prompt) |>
+  group_by(participant_id) |> summarise(bot_prompt = paste(sort(unique(bot_prompt)), collapse = "+"))
+
+qual <- assigned |>
+  left_join(chat_sum, by = "participant_id") |>
+  left_join(bot_served, by = "participant_id") |>
+  mutate(across(c(n_msgs, user_words, bot_words), \(x) replace_na(x, 0)),
+         expected_bot = if_else(condition == "treatment", "republican_persona", "cats_dogs"),
+         bot_ok = coalesce(bot_prompt == expected_bot, FALSE))
+
+qual |>
+  arrange(condition, started_at) |>
+  transmute(ID = str_sub(participant_id, -4), Condition = condition, Completed = completed,
+            Rounds = n_rounds_saved, `Chat msgs` = n_msgs, `Chat words` = user_words,
+            `Bot matches cond.` = bot_ok, `Chat timer valid` = chatbot_duration_valid,
+            `Tab leaves` = n_tab_leaves, `Tab-away s` = fmt(tab_leave_total_s, 0),
+            `Keys: math` = keys_math_check, `Keys: age` = keys_age, `Keys: comments` = keys_comments,
+            `Keys: other` = keys_unlabeled, Pastes = n_paste,
+            `Load-to-submit min` = fmt(mins(bot_timing_ms), 1)) |>
+  kable(caption = "One row per assigned participant (ID = last 4 characters of the database id). Keystroke counts cover the parent page only; chat typing happens inside the chatbot iframe and is not captured.")
+```
+
+```{r quality-summary}
+qs <- qual |> summarise(
+  n = n(),
+  missing_rounds = sum(completed & n_rounds_saved < N_ROUNDS),
+  any_tab_leave = sum(n_tab_leaves > 0),
+  timer_invalid = sum(chatbot_duration_valid %in% FALSE),
+  bot_mismatch = sum(!bot_ok),
+  no_chat = sum(n_msgs == 0),
+  pastes = sum(n_paste > 0),
+  honeypot = sum(!is.na(honeypot_value) & honeypot_value != ""),
+  fast = sum(completed & mins(bot_timing_ms) < 6, na.rm = TRUE))
+```
+
+- **Honeypot:** `r qs$honeypot` hits. The hidden consent field blocks a filled-in form from advancing, but the value is never sent to the server (`honeypotValue` is hard-coded to `''` in `DemographicsScreen.jsx`). A zero here is uninformative.
+- **Bot timer:** `bot_timing_ms` is the time from page load to the demographics submit, so it measures total duration rather than detecting bots. `r qs$fast` completer(s) finished in under 6 minutes, which is impossible with a 5-minute chat. The server-side chat timer flagged `r qs$timer_invalid` participant(s) for leaving the chat before 4.5 minutes had elapsed since assignment.
+- **Tab leaves:** `r qs$any_tab_leave` of `r qs$n` assigned participants left the tab at least once.
+- **Pastes:** `r qs$pastes` participant(s) pressed Ctrl/Cmd+V on the parent page.
+- **Chat:** `r qs$no_chat` assigned participant(s) have no logged chat message. The bot served matched the assigned condition for `r qs$n - qs$bot_mismatch` of `r qs$n`.
+- **Missing rounds:** `r qs$missing_rounds` completer(s) have fewer than `r N_ROUNDS` saved rounds.
+
+```{r fig-chat}
+#| fig-cap: "Chat engagement by condition, assigned participants. Dots are people; the bar is the condition mean with ±1 SE."
+#| fig-height: 3.5
+qual |>
+  select(participant_id, condition, `Participant messages` = n_msgs, `Participant words` = user_words) |>
+  pivot_longer(-c(participant_id, condition)) |>
+  ggplot(aes(condition, value, colour = condition)) +
+  geom_jitter(width = 0.08, height = 0, alpha = 0.6) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15, colour = "black") +
+  stat_summary(fun = mean, geom = "point", size = 3, shape = 18, colour = "black") +
+  facet_wrap(~name, scales = "free_y") +
+  scale_colour_manual(values = COND_COLORS, guide = "none") +
+  scale_x_discrete(labels = c(control = "Control", treatment = "Treatment")) +
+  labs(x = NULL, y = NULL)
+```
+
+## 3. Game
+
+```{r game-data}
+game_ids <- assigned |> filter(n_rounds_saved == N_ROUNDS) |> pull(participant_id)
+g <- rounds |>
+  filter(participant_id %in% game_ids) |>
+  mutate(dist_opt = abs(share_R - OPT_SHARE), exp_rev = exp_rev(share_R),
+         pct_best = 100 * exp_rev / REV_BEST)
+n_game <- g |> distinct(participant_id, condition) |> count(condition)
+n_lab <- setNames(paste0(COND_LABELS[n_game$condition], ", N = ", n_game$n), n_game$condition)
+```
+
+The game analysis uses the `r length(game_ids)` participants with all `r N_ROUNDS` rounds saved (`r paste(n_game$condition, n_game$n, sep = " = ", collapse = ", ")`).
+
+```{r fig-share}
+#| fig-cap: "Share of the budget sent to Riverton (Republican-leaning county) in each round. Thin lines are individual participants; thick lines are condition means with ±1 SE. Dashed line: revenue-maximizing share (0.88). Dotted line: even split (0.50)."
+#| fig-height: 5
+g |>
+  ggplot(aes(round, share_R, colour = condition)) +
+  geom_hline(yintercept = OPT_SHARE, linetype = "dashed") +
+  geom_hline(yintercept = 0.5, linetype = "dotted", colour = "grey50") +
+  geom_line(aes(group = participant_id), alpha = 0.3) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1.3) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  scale_colour_manual(values = COND_COLORS, labels = n_lab) +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  scale_y_continuous(limits = c(0.1, 0.9), labels = scales::percent) +
+  labs(x = "Round", y = "Share of budget to Riverton", colour = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r fig-first-last}
+#| fig-cap: "Share to Riverton in round 1 vs round 10. Lines connect each participant; black points are condition means with ±1 SE. Dashed line: optimum (0.88)."
+#| fig-height: 4
+g |> filter(round %in% c(1, N_ROUNDS)) |>
+  mutate(round = factor(paste("Round", round), levels = paste("Round", c(1, N_ROUNDS)))) |>
+  ggplot(aes(round, share_R, colour = condition)) +
+  geom_hline(yintercept = OPT_SHARE, linetype = "dashed") +
+  geom_line(aes(group = participant_id), alpha = 0.5) +
+  geom_point(alpha = 0.5) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.1, colour = "black") +
+  stat_summary(fun = mean, geom = "point", size = 3, colour = "black") +
+  facet_wrap(~condition, labeller = as_labeller(COND_LABELS)) +
+  scale_colour_manual(values = COND_COLORS, guide = "none") +
+  scale_y_continuous(limits = c(0.1, 0.9), labels = scales::percent) +
+  labs(x = NULL, y = "Share of budget to Riverton")
+```
+
+```{r fig-distance}
+#| fig-cap: "Distance from the optimal share (|share to Riverton − 0.88|, in share points) by round; condition means with ±1 SE. Lower is better."
+#| fig-height: 4
+g |>
+  ggplot(aes(round, dist_opt, colour = condition)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1.2) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  scale_colour_manual(values = COND_COLORS, labels = n_lab) +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  labs(x = "Round", y = "Distance from optimal share", colour = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r tbl-game}
+person <- g |>
+  group_by(participant_id, condition) |>
+  summarise(mean_share = mean(share_R), r1 = share_R[round == 1], r10 = share_R[round == N_ROUNDS],
+            dist = mean(dist_opt), pct_best = mean(pct_best),
+            slope = coef(lm(share_R ~ round))[2], .groups = "drop") |>
+  left_join(assigned |> select(participant_id, game_bonus), by = "participant_id")
+msd <- function(x) paste0(fmt(mean(x)), " (", fmt(se(x)), ")")
+person |> group_by(condition) |>
+  summarise(N = n(), `Mean share to Riverton, rounds 1–10` = msd(mean_share),
+            `Round 1 share` = msd(r1), `Round 10 share` = msd(r10),
+            `Distance from 0.88` = msd(dist),
+            `Expected revenue, % of best choosable` = paste0(fmt(mean(pct_best), 1), " (", fmt(se(pct_best), 1), ")"),
+            `Bonus, $` = msd(na.omit(game_bonus)), .groups = "drop") |>
+  mutate(condition = COND_LABELS[condition]) |>
+  rename(Condition = condition) |>
+  kable(caption = paste0("Game outcomes by condition: mean (SE) across participants. Share = fraction of the $100,000 budget sent to Riverton. Expected revenue excludes luck and is scaled so 100% = the best split on the slider (0.90); an even 50/50 split already earns ", fmt(100 * REV_EVEN / REV_BEST, 1), "%, so this scale is compressed. Bonus is the saved game bonus ($0–$1)."))
+```
+
+### Treatment vs control
+
+```{r effect}
+cmp <- function(var) {
+  x <- person[[var]][person$condition == "treatment"]; y <- person[[var]][person$condition == "control"]
+  if (length(x) < 2 || length(y) < 2) return(tibble(var, n_t = length(x), n_c = length(y), diff = mean(x) - mean(y),
+                                                   lo = NA, hi = NA, p = NA, d = NA))
+  tt <- t.test(x, y)  # Welch
+  sp <- sqrt(((length(x) - 1) * var(x) + (length(y) - 1) * var(y)) / (length(x) + length(y) - 2))
+  tibble(var, n_t = length(x), n_c = length(y), diff = mean(x) - mean(y),
+         lo = tt$conf.int[1], hi = tt$conf.int[2], p = tt$p.value, d = (mean(x) - mean(y)) / sp)
+}
+eff <- map_dfr(c("mean_share", "slope", "dist"), cmp)
+e1 <- eff[1, ]; e2 <- eff[2, ]
+n_per <- min(e1$n_t, e1$n_c)
+mdd <- if (n_per >= 2) power.t.test(n = n_per, power = 0.8, sig.level = 0.05)$delta else NA
+eff |>
+  mutate(Outcome = c("Mean share to Riverton, rounds 1–10 (share points)",
+                     "Learning slope: change in share per round",
+                     "Mean distance from 0.88 (share points)"),
+         `N (T / C)` = paste(n_t, n_c, sep = " / "),
+         `Diff (T − C)` = fmt(diff, 3), `95% CI` = if_else(is.na(lo), "n/a", paste0("[", fmt(lo, 3), ", ", fmt(hi, 3), "]")),
+         p = fmt(p, 2), `Cohen's d` = fmt(d, 2)) |>
+  select(Outcome, `N (T / C)`, `Diff (T − C)`, `95% CI`, p, `Cohen's d`) |>
+  kable(caption = "Treatment minus control, one value per participant. Welch t-test CIs; d uses the pooled SD.")
+```
+
+`r if (is.na(e1$d)) "Each condition needs at least 2 complete game players before the difference can be estimated." else paste0("**Main pilot question.** Across rounds 1–10, treated participants (Republican persona bot, N = ", e1$n_t, ") sent on average ", fmt(100 * abs(e1$diff), 1), " percentage points ", if_else(e1$diff >= 0, "more", "less"), " of the budget to Riverton than control participants (cats-vs-dogs bot, N = ", e1$n_c, "), 95% CI [", fmt(100 * e1$lo, 1), ", ", fmt(100 * e1$hi, 1), "] points. Cohen's d = ", fmt(e1$d, 2), ": the average treated participant's mean share sits ", fmt(abs(e1$d), 2), " standard deviations (of between-person differences in mean share) ", if_else(e1$d >= 0, "above", "below"), " the average control participant's. For learning speed, the per-round change in share to Riverton differs by ", fmt(e2$diff, 3), " share points per round (treatment − control), 95% CI [", fmt(e2$lo, 3), ", ", fmt(e2$hi, 3), "], d = ", fmt(e2$d, 2), ".")`
+
+`r if (!is.na(mdd)) paste0("**The pilot is underpowered.** With ", n_per, " participants in the smaller condition, a two-sided t-test at α = .05 has 80% power only for d ≥ ", fmt(mdd, 2), ". The CIs above span effects of opposite sign; read the direction as a hint, not a result.") else "**The pilot is underpowered.** Too few complete players to estimate power."`
+
+## 4. Integrity checks
+
+```{r checks}
+r_all <- rounds |> left_join(assigned |> select(participant_id, game_bonus, game_score_R_world, completed), by = "participant_id")
+order_bad <- rounds |> group_by(participant_id) |> arrange(saved_at, .by_group = TRUE) |>
+  summarise(bad = any(diff(round) <= 0) | any(round != seq_along(round)))
+person_all <- r_all |> group_by(participant_id) |>
+  summarise(bonus_sum = round(sum(bonus), 2), game_bonus = first(game_bonus),
+            score = mean(split_score), game_score = first(game_score_R_world), n = n())
+yoke <- assigned |> arrange(started_at) |> group_by(condition) |>
+  mutate(expected_seed = ((row_number() - 1) %/% 2) %% 100) |> ungroup()
+n_yoke_bad <- sum(yoke$game_seed != yoke$expected_seed, na.rm = TRUE)
+checks <- tribble(
+  ~Check, ~Problems,
+  "Duplicate Prolific IDs among assigned participants", sum(duplicated(assigned$prolific_pid)),
+  "Prolific ID both screened out and assigned", sum(assigned$prolific_pid %in% screen$prolific_pid),
+  "Duplicate Prolific IDs among screen-outs", sum(duplicated(screen$prolific_pid)),
+  "Duplicate submission IDs", sum(duplicated(na.omit(assigned$submission_id))),
+  "Orphan records (demographics saved without a participant record)", sum(parts$orphan),
+  "Assigned but not a Democrat, or party strength < 25", sum(assigned$party != "Democrat" | assigned$extremity < 25, na.rm = TRUE),
+  "Assigned on an app build other than 1ac0f92 (v2.1.0)", sum(assigned$app_commit != "1ac0f92", na.rm = TRUE),
+  "Completed with fewer than 10 rounds", sum(assigned$completed & assigned$n_rounds_saved < N_ROUNDS),
+  "Game finished but demographics missing (> 30 min ago)", sum(!is.na(assigned$game_finished_at) & !assigned$completed & assigned$game_finished_at < pull_time - minutes(30)),
+  "Duplicate (participant, round) rows", sum(duplicated(rounds[c("participant_id", "round")])),
+  "Rounds saved out of order or with gaps", sum(order_bad$bad),
+  "share_R outside 0.10–0.90 or off the 5% grid", sum(rounds$share_R < 0.1 - 1e-9 | rounds$share_R > 0.9 + 1e-9 | abs(rounds$share_R * 20 - round(rounds$share_R * 20)) > 1e-6),
+  "alloc_R + alloc_D != $100,000, or alloc_R != share_R x budget", sum(rounds$alloc_R + rounds$alloc_D != BUDGET | abs(rounds$alloc_R - rounds$share_R * BUDGET) > 1),
+  "total_rev != rev_R + rev_D", sum(rounds$total_rev != rounds$rev_R + rounds$rev_D),
+  "Round bonus differs from the bonus rule (> $0.001)", sum(abs(rounds$bonus - round_bonus(rounds$share_R)) > 1e-3),
+  "Saved game bonus != sum of round bonuses (complete games)", sum(person_all$n == N_ROUNDS & abs(person_all$bonus_sum - person_all$game_bonus) > 0.011, na.rm = TRUE),
+  "Saved split score != mean of round split scores (complete games)", sum(person_all$n == N_ROUNDS & abs(person_all$score - person_all$game_score) > 0.01, na.rm = TRUE),
+  "Bonus outside $0–$1", sum(assigned$game_bonus < 0 | assigned$game_bonus > 1, na.rm = TRUE),
+  "Age outside 18–100", sum(assigned$age < 18 | assigned$age > 100, na.rm = TRUE),
+  "Chat bot served does not match assigned condition", qs$bot_mismatch,
+  "Client save errors logged (non-test)", nrow(errors),
+  "Luck seed differs from the yoking rule given the person's order within condition", n_yoke_bad
+)
+kable(checks, caption = "Integrity checks. Problems = number of people or rows that fail the check; 0 means clean.")
+```
+
+`r if (n_yoke_bad > 0) paste0("**FLAG: yoking is off for ", n_yoke_bad, " participant(s).** The server assigns the seed from the count of all records in the live participants collection for that condition, so a non-Prolific record (e.g. a preview session that ran without test=1 and got an auto-generated test_ ID) shifts every later seed in that condition by one. Pairs still face similar luck on average, but the k-th treated and k-th control participant no longer see identical revenue shocks. The balance counter for condition assignment counts the same record.") else "Seeds follow the yoking rule."`
+
+```{r assignment-balance}
+assigned |> count(condition, game_seed) |>
+  pivot_wider(names_from = condition, values_from = n, values_fill = 0) |>
+  kable(caption = "Yoked luck seeds: the k-th treated and k-th control participant share a seed (pairs 0, 0, 1, 1, ...). Counts of people per seed.")
+```
