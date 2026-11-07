@@ -88,8 +88,7 @@ const CFG = {
   backD: num('d', 1.00),           // average $ back per $1 invested, Lakewood
   shapeR: num('kr', 2.7),          // noise: SD of one return = mean / sqrt(shape)
   shapeD: num('kd', 2.0),
-  centsPer1kProfit: num('cents', 2.5), // bonus per $1,000 of profit (money back minus money in)
-  maxBonus: num('maxbonus', 1.00),       // bonus cap in dollars
+  maxBonus: num('maxbonus', 1.00), // bonus in dollars at the optimum; the bonus is never above this
   seed: num('seed', Math.floor(Math.random() * 1e9)),
 };
 const N_INVEST = Math.round(CFG.budget / CFG.unit);
@@ -119,8 +118,12 @@ const S = { screen: 'tut1', check: {}, checkTried: false, log: [], last: null, b
 const invested = c => S.log.filter(v => !c || v.county === c).length * CFG.unit;
 const back = c => S.log.filter(v => !c || v.county === c).reduce((s, v) => s + v.back, 0);
 const profit = () => back() - invested();
-const bonusFor = pr => Math.min(CFG.maxBonus, Math.max(0, pr) / 1000 * CFG.centsPer1kProfit / 100);
-const bonus = () => bonusFor(profit());
+// Bonus maps money back linearly from the floor (expected money back if every investment goes to the
+// worse county) to the optimum (expected money back if every investment goes to the better county):
+// floor -> $0, optimum -> maxBonus, clipped to [0, maxBonus]. Luck moves it; it never exceeds maxBonus.
+const FLOOR = CFG.budget * Math.min(CFG.backR, CFG.backD), BEST = CFG.budget * Math.max(CFG.backR, CFG.backD);
+const bonusFor = moneyBack => CFG.maxBonus * Math.min(1, Math.max(0, (moneyBack - FLOOR) / (BEST - FLOOR)));
+const bonus = () => bonusFor(back());
 const $ = x => (x < 0 ? '−$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
 const $s = x => (x >= 0 ? '+' : '') + $(x);
 
@@ -218,7 +221,7 @@ function devPanel() {
   return h`<div class="dev"><div><b>Researcher panel</b> (hidden from participants)</div>
     <div>Truth: $1 brings back $${CFG.backR.toFixed(2)} in Riverton, $${CFG.backD.toFixed(2)} in Lakewood</div>
     <div>Noise: one return's SD is ${Math.round(100 / Math.sqrt(CFG.shapeR))}% (R) / ${Math.round(100 / Math.sqrt(CFG.shapeD))}% (D) of its mean</div>
-    <div>All in Riverton: about ${$(CFG.budget * CFG.backR)} back, bonus $${bonusFor(CFG.budget * (CFG.backR - 1)).toFixed(2)} (cap $${CFG.maxBonus.toFixed(2)})</div>
+    <div>All in Riverton: about ${$(CFG.budget * CFG.backR)} back, bonus $${bonusFor(BEST).toFixed(2)}; floor ${$(FLOOR)} pays $0</div>
     <div>Seed ${CFG.seed} · <a href="${link({ seed: Math.floor(Math.random() * 1e9) })}">new luck</a></div></div>`;
 }
 
