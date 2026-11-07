@@ -18,3 +18,7 @@ Open `prototype.html` in a browser. URL parameters:
 Sales per visit are Poisson. The end screen offers the full visit log as JSON. Parameter values are placeholders until a simulation picks the gap and noise.
 
 `screenshots/` holds static renders (`?shot=belief|game0|game|weekend|end` drives the game to that state with an automatic player).
+
+## Design simulation (`simulate.py`, version a)
+
+`python3 simulate.py` (about 80 s) writes `output/power.csv`, `output/curves.csv`, `output/fig_curves.png` and `output/fig_power.png`. Simulated Democrats are greedy Bayesian learners (Gamma-Poisson) whose prior about Riverton starts at the pilot's control mean (log ratio -0.35, SD 0.4); the chat shifts that prior by +0.1 or +0.2 (d = 0.25 or 0.5). Grid: Riverton sells 1.2x / 1.35x / 1.5x per visit, prior worth about 5 or 20 visits, 100 to 300 people per condition. These simulated people embody assumptions, not pilot estimates of the click game.
