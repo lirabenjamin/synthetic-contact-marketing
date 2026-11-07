@@ -8,7 +8,7 @@ Pilot of the 10-round budget game. Democrats chat for 5 minutes with a Republica
 make -C studies/08_allocation_game_pilot      # from the repo root
 ```
 
-This pulls fresh data (`pull_data.py`) and renders `analysis.html` (`analysis.qmd`). `make pull` or `make report` runs one step.
+This pulls fresh data (`pull_data.py`), fits the Bayesian learner (`fit_learner_pilot.py`) and renders `analysis.html` (`analysis.qmd`). `make pull`, `make learner` or `make report` runs one step.
 
 Needs: `MDB_MCP_CONNECTION_STRING` in the environment (falls back to `MONGODB_URI` in the repo `.env`), and `DATABASE_URL` in the repo `.env` for the chat logs. Python 3 with pymongo, psycopg2, pandas, python-dotenv; R with tidyverse, jsonlite, knitr; Quarto.
 
@@ -17,7 +17,8 @@ Needs: `MDB_MCP_CONNECTION_STRING` in the environment (falls back to `MONGODB_UR
 | File | Content |
 |---|---|
 | `pull_data.py` | Read-only pull from MongoDB `twins-allocation-game` (participants, screenouts, client_errors) and the chatbot Postgres `conversation_logs`. Drops test records (Prolific ID starting `TEST_`/`test_`, or `test = true`). |
-| `analysis.qmd` / `analysis.html` | Pilot report: flow and timing, data quality, game results, treatment vs control, integrity checks. |
+| `fit_learner_pilot.py` | Bayesian learner fit per person (prior mean, prior strength n0, choice noise), parameter recovery at the live settings, and the ideal-learner benchmark. Imports `studies/06_bo_pilot/fit_learner.py`; writes `data/processed/learner_*.csv`. |
+| `analysis.qmd` / `analysis.html` | Pilot report: flow and timing, data quality, game results, treatment vs control, Bayesian learner, integrity checks. |
 | `data/raw/*.jsonl` | Full Mongo records (with Prolific IDs and keystrokes). |
 | `data/processed/*.csv` | `participants.csv` (one row per assigned person), `rounds.csv` (one row per round), `screenouts.csv`, `chat_messages.csv` (one row per chat exchange; `is_system_prompt` marks the logged bot prompt), `client_errors.csv`. |
 

@@ -17,6 +17,8 @@ This folder holds a GP with Thompson sampling that chooses the game's knobs for 
 - `simulate.py`: simulated players with known rules, and a simulated Prolific launch with overlapping arrivals.
 - `benchmark.py`: compares the adaptive policy with plain random assignment over 30 simulated launches.
 - `dashboard.py` + `dashboard_template.html`: build the dashboard as one self-contained HTML file.
+- `fit_learner.py`: fits a Bayesian learner to each person's splits (prior mean, prior strength n0, choice noise) with an exact grid posterior, and runs parameter recovery across game settings (`make bo-learner-recovery`).
+- `play_game.html`: the game as one participant plays it, with a debrief that shows the learning score and the learner fit (same grid as `fit_learner.py`).
 - `test_bo_pilot.py`: tests of the formulas, the GP, the launch policy and the MongoDB queue.
 
 ## Commands (from the repo root)

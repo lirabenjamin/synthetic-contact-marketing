@@ -312,7 +312,145 @@ eff |>
 
 `r if (!is.na(mdd)) paste0("**The pilot is underpowered.** With ", n_per, " participants in the smaller condition, a two-sided t-test at α = .05 has 80% power only for d ≥ ", fmt(mdd, 2), ". The CIs above span effects of opposite sign; read the direction as a hint, not a result.") else "**The pilot is underpowered.** Too few complete players to estimate power."`
 
-## 4. Integrity checks
+## 4. Bayesian learner
+
+```{r learner-data}
+fits <- read_csv(file.path(PROC, "learner_fits.csv"), show_col_types = FALSE)
+rec <- read_csv(file.path(PROC, "learner_recovery.csv"), show_col_types = FALSE)
+ideal <- read_csv(file.path(PROC, "learner_ideal.csv"), show_col_types = FALSE)
+ideal_mc <- read_csv(file.path(PROC, "learner_ideal_mc.csv"), show_col_types = FALSE)
+s_of <- function(m) pmin(0.9, pmax(0.1, 1 / (1 + exp(-m / (1 - ALPHA)))))   # split implied by belief m
+N0_IDEAL <- 2 * 0.7^2 / DELTA^2
+n_fit <- fits |> count(condition)
+n_fit_lab <- setNames(paste0(COND_LABELS[n_fit$condition], ", N = ", n_fit$n), n_fit$condition)
+r_rec <- c(mu0 = cor(rec$mu0_true, rec$mu0_hat), n0 = cor(rec$log_n0_true, rec$log_n0_hat),
+           sig = cor(rec$log_sig_true, rec$log_sig_hat))
+cap_learner <- c(
+  paste0("Parameter recovery at the live game settings (N = ", nrow(rec), " simulated people). Each dot is one simulated person: true value (x) vs posterior mean (y). Dashed line: perfect recovery. Prior mean is in log pay-ratio units; prior strength and choice noise are on log scales."),
+  paste0("Each participant's posterior mean (dot) with 80% posterior interval (thin line), by condition (N = ", nrow(fits), "). Black diamond and bar: condition mean ±1 SE across participants. Prior mean is in log pay-ratio units (0 = counties pay the same; truth = 1). Prior strength n0 and choice noise are on log10 axes."),
+  paste0("Share of budget to Riverton by round. Coloured lines: participants by condition, mean ±1 SE (N = ", nrow(fits), "). Black line: ideal flat-prior Bayesian fed each person's own revenue signals, mean ±1 SE across the same ", nrow(fits), " people. Grey band: 80% range of the ideal learner over 20,000 fresh luck draws. Dashed line: optimum 0.88."))
+```
+
+**Model.** Each person holds a belief $m$ about $\theta = \log(w_R / w_D)$, how much more Riverton pays per dollar than Lakewood (truth: $\theta = 1$, so Riverton pays 2.7 times as much at the same spend). Before round 1 the belief is the **prior mean** $\mu_0$. After each round the person reads the signal $y_t = \log(\text{rev}_R / \text{rev}_D) - 0.5 \log(s_t / (1 - s_t))$, the revenue ratio with the effect of the split removed, and updates $m_{t+1} = m_t + (y_t - m_t) / (n_0 + t)$. The **prior strength** $n_0$ is the number of rounds of feedback the prior is worth: a large $n_0$ means a stubborn prior and slow learning. Each split is the revenue-maximizing split for the current belief, $1 / (1 + e^{-2m})$, plus normal **choice noise** (SD in share points), rounded to the slider's 5% grid and capped at 0.10 and 0.90. The fit is an exact grid posterior per person (flat priors over $\mu_0 \in [-2.5, 2.5]$, $n_0 \in [0.05, 100]$, noise $\in [0.02, 0.60]$), using all `r N_ROUNDS` rounds. Code: `fit_learner_pilot.py`, which imports the learner in `studies/06_bo_pilot/fit_learner.py` and changes only the game settings and the grid likelihood. The model assumes people know the curve shape ($\alpha = 0.5$), which the game never tells them.
+
+### Can 10 rounds identify the parameters?
+
+Parameter recovery simulates `r nrow(rec)` people who play the live game (δ = 1, α = 0.5, luck SD σ = 0.7, 10 rounds, 5% grid, Riverton better), with $\mu_0$, $\log n_0$ and log noise drawn from the spread of the pilot's own estimates, then refits each one. Correlation between true and estimated values across the `r nrow(rec)` simulated people: prior mean r = `r fmt(r_rec["mu0"])`, log prior strength r = `r fmt(r_rec["n0"])`, log choice noise r = `r fmt(r_rec["sig"])`. The 80% posterior intervals contain the true $n_0$ for `r round(100 * mean(rec$log_n0_in80))`% of simulated people and the true $\mu_0$ for `r round(100 * mean(rec$mu0_in80))`%. So 10 rounds separate people well on noise, and moderately on prior mean and prior strength: an individual's $n_0$ is a rough ranking, and condition means are more trustworthy than single people.
+
+```{r fig-recovery, fig.height = 3.6}
+#| fig-cap: !expr cap_learner[1]
+rec |>
+  transmute(`Prior mean μ0` = paste(mu0_true, mu0_hat), `log prior strength n0` = paste(log_n0_true, log_n0_hat),
+            `log choice noise` = paste(log_sig_true, log_sig_hat)) |>
+  pivot_longer(everything()) |>
+  separate(value, c("true", "hat"), sep = " ", convert = TRUE) |>
+  ggplot(aes(true, hat)) +
+  geom_abline(linetype = "dashed") +
+  geom_point(alpha = 0.25, size = 0.8) +
+  facet_wrap(~name, scales = "free") +
+  labs(x = "True value", y = "Estimated value")
+```
+
+### Prior or learning: estimates by condition
+
+```{r learner-cond}
+lcmp <- function(var, lab) {
+  x <- fits[[var]][fits$condition == "treatment"]; y <- fits[[var]][fits$condition == "control"]
+  tt <- t.test(x, y)
+  sp <- sqrt(((length(x) - 1) * var(x) + (length(y) - 1) * var(y)) / (length(x) + length(y) - 2))
+  tibble(Parameter = lab, n_t = length(x), n_c = length(y), m_t = mean(x), se_t = se(x), m_c = mean(y), se_c = se(y),
+         diff = mean(x) - mean(y), lo = tt$conf.int[1], hi = tt$conf.int[2], p = tt$p.value, d = (mean(x) - mean(y)) / sp)
+}
+leff <- bind_rows(lcmp("mu0", "Prior mean μ0 (log Riverton/Lakewood pay ratio)"),
+                  lcmp("log_n0", "log prior strength, log n0 (rounds of feedback)"),
+                  lcmp("log_sig", "log choice noise (log share points)"))
+leff |>
+  transmute(Parameter, `N (T / C)` = paste(n_t, n_c, sep = " / "),
+            `Treatment mean (SE)` = paste0(fmt(m_t), " (", fmt(se_t), ")"),
+            `Control mean (SE)` = paste0(fmt(m_c), " (", fmt(se_c), ")"),
+            `Diff (T − C)` = fmt(diff), `95% CI` = paste0("[", fmt(lo), ", ", fmt(hi), "]"),
+            p = fmt(p, 2), `Cohen's d` = fmt(d, 2)) |>
+  kable(caption = "Learner parameters by condition: mean (SE) across participants of each person's posterior mean. Treatment minus control with Welch 95% CIs; d uses the pooled SD.")
+e_mu <- leff[1, ]; e_n0 <- leff[2, ]; e_sig <- leff[3, ]
+at_ceiling <- mean(fits$log_n0_hi80 >= log(100) - 0.25)
+```
+
+```{r fig-learner-params, fig.height = 4}
+#| fig-cap: !expr cap_learner[2]
+fits |>
+  transmute(participant_id, condition,
+            `Prior mean μ0` = paste(mu0, mu0_lo80, mu0_hi80),
+            `log10 prior strength n0 (rounds)` = paste(log_n0, log_n0_lo80, log_n0_hi80),
+            `log10 choice noise (share points)` = paste(log_sig, log_sig_lo80, log_sig_hi80)) |>
+  pivot_longer(-c(participant_id, condition)) |>
+  separate(value, c("est", "lo", "hi"), sep = " ", convert = TRUE) |>
+  mutate(across(c(est, lo, hi), \(v) if_else(name == "Prior mean μ0", v, v / log(10)))) |>
+  ggplot(aes(condition, est, colour = condition)) +
+  geom_linerange(aes(ymin = lo, ymax = hi), position = position_jitter(width = 0.15, seed = 1), alpha = 0.35) +
+  geom_point(position = position_jitter(width = 0.15, seed = 1), alpha = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15, colour = "black") +
+  stat_summary(fun = mean, geom = "point", size = 3, shape = 18, colour = "black") +
+  facet_wrap(~name, scales = "free_y") +
+  scale_colour_manual(values = COND_COLORS, guide = "none") +
+  scale_x_discrete(labels = c(control = "Control", treatment = "Treatment")) +
+  labs(x = NULL, y = "Estimate")
+```
+
+**Prior mean.** Before playing, control participants (cats-vs-dogs bot, N = `r e_mu$n_c`) acted as if Lakewood paid more: mean $\mu_0$ = `r fmt(e_mu$m_c)` (SE `r fmt(e_mu$se_c)`), a belief that Riverton pays `r fmt(exp(e_mu$m_c))` times what Lakewood pays, which implies sending `r round(100 * s_of(e_mu$m_c))`% of the budget to Riverton. Treated participants (Republican persona bot, N = `r e_mu$n_t`) started at $\mu_0$ = `r fmt(e_mu$m_t)` (SE `r fmt(e_mu$se_t)`), a ratio of `r fmt(exp(e_mu$m_t))` and an implied split of `r round(100 * s_of(e_mu$m_t))`% to Riverton. The difference is `r fmt(e_mu$diff)` log units, 95% CI [`r fmt(e_mu$lo)`, `r fmt(e_mu$hi)`], d = `r fmt(e_mu$d, 2)`: the average treated person's prior sits `r fmt(abs(e_mu$d), 2)` between-person SDs `r if_else(e_mu$diff >= 0, "closer to", "further from")` the truth than the average control person's. Both groups start below 0, on the wrong side (truth = +1).
+
+**Prior strength.** Mean $\log n_0$ was `r fmt(e_n0$m_c)` (SE `r fmt(e_n0$se_c)`) in control and `r fmt(e_n0$m_t)` (SE `r fmt(e_n0$se_t)`) in treatment: a typical prior worth `r round(exp(e_n0$m_c))` rounds of feedback in control and `r round(exp(e_n0$m_t))` in treatment, so round 1's revenue moves the belief only `r round(100 / (exp(e_n0$m_c) + 1))`% and `r round(100 / (exp(e_n0$m_t) + 1))`% of the way to the signal. An ideal Bayesian who knows either county could be the better one has $n_0$ = `r fmt(N0_IDEAL)`. Treatment minus control = `r fmt(e_n0$diff)` log units, 95% CI [`r fmt(e_n0$lo)`, `r fmt(e_n0$hi)`], d = `r fmt(e_n0$d, 2)`. For `r round(100 * at_ceiling)`% of people the 80% interval reaches the top of the grid ($n_0$ = 100), so for them the data say only that the prior was very stubborn and the revenue feedback barely moved them.
+
+**Choice noise.** Mean log noise was `r fmt(e_sig$m_c)` in control (typical noise `r round(100 * exp(e_sig$m_c))` share points) and `r fmt(e_sig$m_t)` in treatment (`r round(100 * exp(e_sig$m_t))` share points); difference `r fmt(e_sig$diff)` log units, 95% CI [`r fmt(e_sig$lo)`, `r fmt(e_sig$hi)`], d = `r fmt(e_sig$d, 2)`.
+
+**Prior or learning?** In this pilot, the chatbot's difference in where people start (prior mean, p = `r fmt(e_mu$p, 2)`) is `r if_else(e_mu$p < e_n0$p, "clearer than", "less clear than")` its difference in how fast they learn (prior strength, p = `r fmt(e_n0$p, 2)`). **The pilot is underpowered:** with `r min(e_mu$n_t, e_mu$n_c)` people in the smaller condition, a t-test has 80% power only for d ≥ `r fmt(power.t.test(n = min(e_mu$n_t, e_mu$n_c), power = 0.8)$delta, 2)`, and every CI above is wide. Read the direction as a hint for the main study, not a result.
+
+### Is the plateau the people or the game?
+
+```{r ideal}
+ideal_r10 <- ideal |> filter(round == N_ROUNDS)
+ir <- ideal_r10 |> summarise(across(c(actual, flat, calibrated, own_prior_ideal_learning, neutral_prior_own_learning),
+                                    list(m = mean, se = se)))
+mc10 <- ideal_mc |> filter(round == N_ROUNDS)
+```
+
+An ideal Bayesian with a flat prior and no choice noise, fed the revenue each person actually saw, believes the mean of the signals so far and picks the best grid split for that belief. The share-corrected signal does not depend on the split, so the benchmark can reuse each person's own luck draws. In round 10 that ideal learner sends `r round(100 * ir$flat_m)`% (SE `r fmt(100 * ir$flat_se, 1)` points, N = `r nrow(ideal_r10)` people's luck draws) of the budget to Riverton; people sent `r round(100 * ir$actual_m)`% (SE `r fmt(100 * ir$actual_se, 1)`). Over 20,000 fresh luck draws the flat-prior ideal reaches `r round(100 * mc10$mean_share[mc10$learner == "flat"])`% by round 10 (80% of games between `r round(100 * mc10$q10[mc10$learner == "flat"])`% and `r round(100 * mc10$q90[mc10$learner == "flat"])`%), and a calibrated ideal (prior centred on 0, $n_0$ = `r fmt(N0_IDEAL)`) reaches `r round(100 * mc10$mean_share[mc10$learner == "calibrated"])`%. **The game is learnable in 10 rounds; the plateau near `r round(100 * ir$actual_m)`% comes from the people.**
+
+Two counterfactuals split the gap. Keeping each person's own prior mean but giving them ideal learning ($n_0$ = `r fmt(N0_IDEAL)`) yields `r round(100 * ir$own_prior_ideal_learning_m)`% to Riverton in round 10 (SE `r fmt(100 * ir$own_prior_ideal_learning_se, 1)`). Keeping each person's own prior strength but starting from a neutral prior ($\mu_0$ = 0) yields `r round(100 * ir$neutral_prior_own_learning_m)`% (SE `r fmt(100 * ir$neutral_prior_own_learning_se, 1)`). Slow learning, more than the starting belief, holds people back.
+
+```{r fig-ideal, fig.height = 4.5}
+#| fig-cap: !expr cap_learner[3]
+band <- ideal_mc |> filter(learner == "flat")
+ideal_long <- ideal |> select(participant_id, condition, round, actual, flat)
+ggplot() +
+  geom_ribbon(data = band, aes(round, ymin = q10, ymax = q90), fill = "grey85") +
+  geom_hline(yintercept = OPT_SHARE, linetype = "dashed") +
+  stat_summary(data = ideal_long, aes(round, flat), fun = mean, geom = "line", linewidth = 1.1) +
+  stat_summary(data = ideal_long, aes(round, flat), fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  stat_summary(data = ideal_long, aes(round, actual, colour = condition), fun = mean, geom = "line", linewidth = 1.1) +
+  stat_summary(data = ideal_long, aes(round, actual, colour = condition), fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  scale_colour_manual(values = COND_COLORS, labels = n_fit_lab) +
+  scale_x_continuous(breaks = 1:N_ROUNDS) +
+  scale_y_continuous(limits = c(0.1, 0.92), labels = scales::percent) +
+  labs(x = "Round", y = "Share of budget to Riverton", colour = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r tbl-ideal}
+learner_labels <- c(actual = "Participants (actual)", flat = "Ideal, flat prior",
+                    calibrated = "Ideal, calibrated prior (μ0 = 0, n0 = 0.98)",
+                    own_prior_ideal_learning = "Own prior mean, ideal learning (n0 = 0.98)",
+                    neutral_prior_own_learning = "Neutral prior (μ0 = 0), own prior strength")
+ideal_r10 |>
+  pivot_longer(all_of(names(learner_labels))) |>
+  group_by(name, condition) |>
+  summarise(v = paste0(fmt(100 * mean(value), 1), " (", fmt(100 * se(value), 1), ")"), .groups = "drop") |>
+  pivot_wider(names_from = condition, values_from = v) |>
+  arrange(match(name, names(learner_labels))) |>
+  transmute(Learner = learner_labels[name], Control = control, Treatment = treatment) |>
+  kable(caption = paste0("Round-10 share of budget to Riverton, % (SE across participants); each learner is fed the person's own revenue signals. N = ", paste(n_fit$condition, n_fit$n, sep = " ", collapse = ", "), ". Optimum = 88%; best grid split = 90%."))
+```
+
+## 5. Integrity checks
 
 ```{r checks}
 r_all <- rounds |> left_join(assigned |> select(participant_id, game_bonus, game_score_R_world, completed), by = "participant_id")

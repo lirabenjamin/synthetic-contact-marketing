@@ -1,0 +1,400 @@
+<title>Market Split</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: one narrow column; setup -> play -> debrief, with the two markets as the only color. */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --ink: #1c2321; --ink-2: #4c5652; --muted: #7c8682;
+  --line: #dde2df; --soft: #eef1ef;
+  --a: #0f766e; --a-soft: #d7efec; --b: #a85a0c; --b-soft: #f6e6d3;
+  --accent: #1c2321; --good: #2f7d32; --best: #6d28d9;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141917; --panel: #1c2220; --ink: #e8ece9; --ink-2: #b4bdb9; --muted: #8a9490;
+  --line: #313a37; --soft: #232a28;
+  --a: #4fc4b6; --a-soft: #1d3a37; --b: #e3a15c; --b-soft: #3d2e1e;
+  --accent: #e8ece9; --good: #7cc47f; --best: #b79cf5; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141917; --panel: #1c2220; --ink: #e8ece9; --ink-2: #b4bdb9; --muted: #8a9490;
+  --line: #313a37; --soft: #232a28;
+  --a: #4fc4b6; --a-soft: #1d3a37; --b: #e3a15c; --b-soft: #3d2e1e;
+  --accent: #e8ece9; --good: #7cc47f; --best: #b79cf5; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px; }
+h1 { font: 600 2rem/1.1 var(--f-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h2 { font: 600 1.25rem/1.2 var(--f-display); margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 66ch; }
+.sub { color: var(--ink-2); }
+.eyebrow { font: 500 .72rem/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 20px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+button { font: 600 .95rem var(--f-body); border-radius: 7px; padding: 10px 18px; cursor: pointer; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
+button:disabled { opacity: .4; cursor: default; }
+label.field { display: grid; gap: 4px; font-size: .85rem; color: var(--ink-2); }
+select, input[type=number] { font: 500 .9rem var(--f-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; color: var(--ink-2); }
+details summary { cursor: pointer; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 .75rem var(--f-mono); padding: 3px 8px; border-radius: 99px; background: var(--soft); color: var(--ink-2); }
+
+/* allocation control */
+.alloc { display: grid; gap: 10px; }
+.split-bar { display: flex; height: 44px; border-radius: 8px; overflow: hidden; font: 600 .9rem var(--f-mono); }
+.split-bar div { display: flex; align-items: center; padding: 0 12px; white-space: nowrap; transition: flex-basis .12s; }
+.seg-a { background: var(--a-soft); color: var(--a); justify-content: flex-start; }
+.seg-b { background: var(--b-soft); color: var(--b); justify-content: flex-end; }
+input[type=range] { width: 100%; accent-color: var(--ink); }
+.range-ends { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
+
+.tag-a { color: var(--a); font-weight: 600; } .tag-b { color: var(--b); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 .72rem var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+td { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+tr.latest td { background: var(--soft); }
+.stat { display: grid; gap: 2px; }
+.stat b { font: 600 1.6rem/1.1 var(--f-display); }
+.stat span { font-size: .82rem; color: var(--ink-2); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+svg text { fill: var(--muted); font: 11px var(--f-mono); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.chart-title { font-size: .85rem; font-weight: 600; margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.note { font-size: .85rem; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .split-bar div { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:6px">
+    <span class="eyebrow">Learning game · first-layer pilot</span>
+    <h1>Market Split</h1>
+    <p class="sub">Play the game a participant would play. The settings stay hidden until the last round. Then the page shows the best split, how close you got, and the learning score the GP would receive.</p>
+  </header>
+
+  <!-- SETUP -->
+  <section id="v-setup" class="panel">
+    <h2>Pilot settings</h2>
+    <p class="note">Leave a knob on <b>Random</b> to play blind, as a participant would. Fix a knob to explore one setting on purpose.</p>
+    <div class="grid2">
+      <label class="field">Market gap δ (log of how much more the better market pays)
+        <select id="s-delta">
+          <option value="0.4">0.4 · pays 49% more (current)</option>
+          <option value="0.8" selected>0.8 · pays 123% more (recommended)</option>
+          <option value="1.2">1.2 · pays 232% more</option>
+        </select>
+      </label>
+      <label class="field">Payoff curvature α (low = strong diminishing returns)
+        <select id="s-alpha">
+          <option value="random" selected>Random, 0.2 to 0.8</option>
+          <option>0.2</option><option>0.35</option><option>0.5</option><option>0.65</option><option>0.8</option>
+        </select>
+      </label>
+      <label class="field">Signal-to-noise (δ ÷ SD of each market's log revenue noise)
+        <select id="s-snr">
+          <option value="random" selected>Random, 0.25 to 4 (log scale)</option>
+          <option>0.25</option><option>0.5</option><option>1</option><option>2</option><option>4</option>
+        </select>
+      </label>
+      <label class="field">Rounds
+        <select id="s-rounds">
+          <option value="random" selected>Random, 6 to 13</option>
+          <option>6</option><option>8</option><option>10</option><option>13</option>
+        </select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="s-tell" checked> Tell the player that each extra dollar earns less than the one before</label>
+    <label class="check"><input type="checkbox" id="s-perk"> Show revenue per $1,000 spent in each market</label>
+    <div class="row"><button id="b-start">Start a game</button><span class="note">Which market is better is always random.</span></div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="v-play" class="panel" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2 id="p-round">Round 1 of 8</h2>
+      <span class="num" id="p-total">Total revenue: $0</span>
+    </div>
+    <p id="p-instr"></p>
+    <div class="alloc">
+      <div class="split-bar" aria-hidden="true"><div class="seg-a" id="bar-a"></div><div class="seg-b" id="bar-b"></div></div>
+      <label for="p-slider" class="eyebrow">Your split of $100,000</label>
+      <input type="range" id="p-slider" min="5" max="95" step="1" value="50" aria-describedby="p-split-text">
+      <div class="range-ends"><span>More to <span class="tag-a">A</span></span><span id="p-split-text" class="num"></span><span>More to <span class="tag-b">B</span></span></div>
+    </div>
+    <div class="row"><button id="b-invest">Invest this round</button></div>
+    <div class="table-wrap"><table id="p-table"></table></div>
+    <div class="chips" id="p-chips"></div>
+  </section>
+
+  <!-- DEBRIEF -->
+  <section id="v-result" class="panel" hidden>
+    <span class="eyebrow">Debrief</span>
+    <h2 id="r-headline"></h2>
+    <div class="stats" id="r-stats"></div>
+    <div class="charts">
+      <div><div class="chart-title">Your share to the better market, by round</div><svg id="c-share" viewBox="0 0 360 220" role="img" aria-label="Share to better market by round"></svg>
+        <div class="legend"><span><i style="border-color:var(--ink)"></i>You</span><span><i style="border-color:var(--a)"></i>Learner model</span><span><i style="border-color:var(--best);border-top-style:dashed"></i>Best split</span><span><i style="border-color:var(--muted);border-top-style:dotted"></i>50/50</span></div></div>
+      <div><div class="chart-title">Your distance from the best split (what the score uses)</div><svg id="c-gap" viewBox="0 0 360 220" role="img" aria-label="Distance from best split by round"></svg>
+        <div class="legend"><span><i style="border-color:var(--ink)"></i>Distance</span><span><i style="border-color:var(--good)"></i>Fitted straight line</span></div></div>
+    </div>
+    <p class="note" id="r-score-note"></p>
+    <div style="display:grid;gap:12px;border-top:1px solid var(--line);padding-top:16px">
+      <span class="eyebrow">Bayesian learner fit to your splits</span>
+      <p class="note">The model assumes you held a belief about how much more one market pays. You started at a prior mean. After each round you moved toward that round's revenue signal by a learning rate of 1 / (n0 + round). Here n0 is your prior strength in rounds of feedback, and a large n0 means a sticky prior. Each split is the best split for your belief that round, plus choice noise. Evidence weight compares you with an ideal Bayesian for this game, whose prior strength is n0* = 2 / SNR². The ranges are 80% posterior intervals.</p>
+      <div class="stats" id="r-fit"></div>
+      <div><div class="chart-title">Your inferred belief: how much more the better market pays</div><svg id="c-belief" viewBox="0 0 360 220" role="img" aria-label="Inferred belief by round"></svg>
+        <div class="legend"><span><i style="border-color:var(--a)"></i>Belief before each round</span><span><i style="border-color:var(--muted);border-top-style:dotted"></i>Revenue signal from each round</span><span><i style="border-color:var(--best);border-top-style:dashed"></i>Truth</span></div></div>
+    </div>
+    <div class="table-wrap"><table id="r-params"></table></div>
+    <div class="row"><button id="b-again">Play again, same settings</button><button class="ghost" id="b-setup">Change settings</button></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="v-history" class="panel">
+    <div class="row" style="justify-content:space-between"><h2>Your games</h2>
+      <div class="row"><button class="ghost" id="b-copy">Copy as JSON</button><button class="ghost" id="b-clear">Clear</button></div></div>
+    <p class="note" id="h-empty">No finished games yet. Finished games are saved in this browser only. Use Copy as JSON to send them to Claude.</p>
+    <div class="table-wrap"><table id="h-table"></table></div>
+    <p class="note" id="h-msg" aria-live="polite"></p>
+  </section>
+</div>
+
+<script>
+(() => {
+const BUDGET = 100000, SCALE = 50000, SMIN = 0.05, SMAX = 0.95, STORE = 'market-split-games-v1';
+const $ = id => document.getElementById(id);
+const fmt$ = v => '$' + Math.round(v).toLocaleString('en-US');
+const pct = v => Math.round(v * 100) + '%';
+
+// ── model (mirrors bo_pilot.py) ──
+const randn = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const bestShare = (d, a) => Math.min(SMAX, Math.max(SMIN, 1 / (1 + Math.exp(-d / (1 - a)))));
+const ev = (p, sBetter) => Math.exp(p.delta) * sBetter ** p.alpha + (1 - sBetter) ** p.alpha;
+function learningScore(sharesBetter, sStar) {
+  const n = sharesBetter.length, gap = sharesBetter.map(s => Math.abs(s - sStar));
+  const t = gap.map((_, i) => i + 1 - (n + 1) / 2), tt = t.reduce((s, x) => s + x * x, 0);
+  const b = gap.reduce((s, g, i) => s + g * t[i], 0) / tt, mean = gap.reduce((s, g) => s + g, 0) / n;
+  return { drop: -b * (n - 1) * 100, b, mean, gap };
+}
+
+// ── Bayesian learner fit (mirrors fit_learner.py: same grid, flat priors, censored at 5% / 95%) ──
+const lin = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const G_MU = lin(-2.5, 2.5, 51), G_LN0 = lin(Math.log(0.05), Math.log(100), 39), G_LSIG = lin(Math.log(0.02), Math.log(0.4), 10);
+function erfc(x) { const z = Math.abs(x), t = 1 / (1 + 0.5 * z);
+  const r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+  return x >= 0 ? r : 2 - r; }
+const logPhi = z => z < -6 ? -0.5 * z * z - Math.log(-z) - 0.5 * Math.log(2 * Math.PI) : Math.log(0.5 * erfc(-z / Math.SQRT2));
+const sStarA = (m, a) => Math.min(SMAX, Math.max(SMIN, 1 / (1 + Math.exp(-m / (1 - a)))));
+function beliefPath(mu0, n0, y) { const m = [mu0]; for (let t = 0; t < y.length - 1; t++) m.push(m[t] + (y[t] - m[t]) / (n0 + t + 1)); return m; }
+function fitLearner(sA, revA, revB, alpha) {
+  const T = sA.length, y = sA.map((s, t) => Math.log(revA[t] / revB[t]) - alpha * Math.log(s / (1 - s)));
+  const ll = [], sig = G_LSIG.map(Math.exp);
+  let best = -Infinity, iBest = 0;
+  G_MU.forEach((mu0, i) => G_LN0.forEach((ln0, j) => {
+    const pred = beliefPath(mu0, Math.exp(ln0), y).map(m => sStarA(m, alpha));
+    sig.forEach((sg, k) => {
+      let L = 0;
+      for (let t = 0; t < T; t++) {
+        if (sA[t] <= SMIN + 1e-6) L += logPhi((SMIN - pred[t]) / sg);
+        else if (sA[t] >= SMAX - 1e-6) L += logPhi(-(SMAX - pred[t]) / sg);
+        else { const z = (sA[t] - pred[t]) / sg; L += -0.5 * z * z - Math.log(sg) - 0.5 * Math.log(2 * Math.PI); }
+      }
+      ll.push(L); if (L > best) { best = L; iBest = ll.length - 1; }
+    });
+  }));
+  const nJ = G_LN0.length, nK = sig.length, mMu = G_MU.map(() => 0), mLn = G_LN0.map(() => 0), mSg = sig.map(() => 0);
+  let Z = 0;
+  ll.forEach((L, idx) => { const p = Math.exp(L - best), i = Math.floor(idx / (nJ * nK)), j = Math.floor(idx / nK) % nJ, k = idx % nK;
+    mMu[i] += p; mLn[j] += p; mSg[k] += p; Z += p; });
+  const q = (vals, marg, pr) => { let c = 0; for (let i = 0; i < vals.length; i++) { c += marg[i] / Z; if (c >= pr) return vals[i]; } return vals.at(-1); };
+  const iMu = Math.floor(iBest / (nJ * nK)), jLn = Math.floor(iBest / nK) % nJ;
+  const path = beliefPath(G_MU[iMu], Math.exp(G_LN0[jLn]), y);
+  const n0 = Math.exp(q(G_LN0, mLn, 0.5));
+  return { mu0: q(G_MU, mMu, 0.5), mu0_lo: q(G_MU, mMu, 0.1), mu0_hi: q(G_MU, mMu, 0.9),
+    n0, n0_lo: Math.exp(q(G_LN0, mLn, 0.1)), n0_hi: Math.exp(q(G_LN0, mLn, 0.9)), lr1: 1 / (1 + n0),
+    sig_s: Math.exp(q(G_LSIG, mSg, 0.5)), y, beliefs: path, fitted: path.map(m => sStarA(m, alpha)) };
+}
+
+// ── state ──
+let settings = null, game = null;
+const load = () => { try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; } };
+const save = g => { try { localStorage.setItem(STORE, JSON.stringify(g)); } catch {} };
+
+function readSettings() {
+  return { delta: +$('s-delta').value, alpha: $('s-alpha').value, snr: $('s-snr').value, rounds: $('s-rounds').value,
+           tell: $('s-tell').checked, perk: $('s-perk').checked };
+}
+function drawParams(s) {
+  const alpha = s.alpha === 'random' ? 0.2 + 0.6 * Math.random() : +s.alpha;
+  const snr = s.snr === 'random' ? Math.exp(Math.log(0.25) + Math.random() * Math.log(16)) : +s.snr;
+  const rounds = s.rounds === 'random' ? 6 + Math.floor(Math.random() * 8) : +s.rounds;
+  const p = { delta: s.delta, alpha, snr, sigma: s.delta / snr, rounds, better: Math.random() < 0.5 ? 'A' : 'B' };
+  p.sStar = bestShare(p.delta, alpha);
+  return p;
+}
+function start() {
+  settings = readSettings();
+  game = { p: drawParams(settings), hist: [], started: new Date().toISOString() };
+  $('p-slider').value = 50;
+  show('v-play'); renderPlay();
+}
+function invest() {
+  const p = game.p, sA = +$('p-slider').value / 100;
+  const sB_ = p.better === 'A' ? sA : 1 - sA;                  // share to the better market
+  const revBetter = SCALE * Math.exp(p.delta) * sB_ ** p.alpha * Math.exp(randn() * p.sigma);
+  const revWorse = SCALE * (1 - sB_) ** p.alpha * Math.exp(randn() * p.sigma);
+  const revA = p.better === 'A' ? revBetter : revWorse, revB = p.better === 'A' ? revWorse : revBetter;
+  game.hist.push({ round: game.hist.length + 1, sA, revA, revB });
+  if (game.hist.length >= p.rounds) finish(); else renderPlay();
+}
+
+// ── play view ──
+function renderSplit() {
+  const v = +$('p-slider').value;
+  $('bar-a').style.flexBasis = v + '%'; $('bar-b').style.flexBasis = (100 - v) + '%';
+  $('bar-a').textContent = 'A ' + fmt$(BUDGET * v / 100); $('bar-b').textContent = fmt$(BUDGET * (100 - v) / 100) + ' B';
+  $('p-split-text').textContent = `${v}% / ${100 - v}%`;
+}
+function renderPlay() {
+  const p = game.p, h = game.hist, r = h.length + 1;
+  $('p-round').textContent = `Round ${r} of ${p.rounds}`;
+  $('p-total').textContent = 'Total revenue: ' + fmt$(h.reduce((s, x) => s + x.revA + x.revB, 0));
+  $('p-instr').textContent = 'Each round you have $100,000 to spend on advertising in two markets, A and B. Each market returns revenue. One market may pay more per dollar than the other. '
+    + (settings.tell ? 'In each market, every extra dollar earns a little less than the one before. ' : '')
+    + 'Revenue is noisy: the same split can earn different amounts in different rounds. Try to earn as much as you can.';
+  const perk = settings.perk;
+  const head = `<tr><th>Round</th><th>Spent A</th><th>Spent B</th><th>Revenue A</th><th>Revenue B</th>${perk ? '<th>A per $1k</th><th>B per $1k</th>' : ''}<th>Total</th></tr>`;
+  const rows = h.slice().reverse().map((x, i) => `<tr class="${i === 0 ? 'latest' : ''}"><td>${x.round}</td><td>${fmt$(BUDGET * x.sA)}</td><td>${fmt$(BUDGET * (1 - x.sA))}</td>`
+    + `<td class="tag-a">${fmt$(x.revA)}</td><td class="tag-b">${fmt$(x.revB)}</td>`
+    + (perk ? `<td>${fmt$(x.revA / (BUDGET * x.sA / 1000))}</td><td>${fmt$(x.revB / (BUDGET * (1 - x.sA) / 1000))}</td>` : '')
+    + `<td>${fmt$(x.revA + x.revB)}</td></tr>`).join('');
+  $('p-table').innerHTML = h.length ? head + rows : '';
+  $('p-chips').innerHTML = ['δ ' + settings.delta, 'α ' + (settings.alpha === 'random' ? 'hidden' : settings.alpha),
+    'SNR ' + (settings.snr === 'random' ? 'hidden' : settings.snr), 'better market hidden'].map(c => `<span class="chip">${c}</span>`).join('');
+  renderSplit();
+}
+
+// ── debrief ──
+function finish() {
+  const p = game.p, h = game.hist;
+  const sb = h.map(x => p.better === 'A' ? x.sA : 1 - x.sA);
+  const sc = learningScore(sb, p.sStar);
+  const fit = fitLearner(h.map(x => x.sA), h.map(x => x.revA), h.map(x => x.revB), p.alpha);
+  const best = ev(p, p.sStar), eff = sb.reduce((s, x) => s + ev(p, x), 0) / sb.length / best, half = ev(p, 0.5) / best;
+  const rec = { when: game.started, delta: p.delta, alpha: +p.alpha.toFixed(3), snr: +p.snr.toFixed(3), sigma: +p.sigma.toFixed(3), rounds: p.rounds,
+    better: p.better, best_share: +p.sStar.toFixed(3), shares_A: h.map(x => +x.sA.toFixed(2)), rev_A: h.map(x => Math.round(x.revA)), rev_B: h.map(x => Math.round(x.revB)),
+    score_pp: +sc.drop.toFixed(1), efficiency: +eff.toFixed(4),
+    fit: { prior_mean_logAB: fit.mu0, prior_mean_80: [fit.mu0_lo, fit.mu0_hi], prior_strength_n0: +fit.n0.toFixed(2),
+           n0_80: [+fit.n0_lo.toFixed(2), +fit.n0_hi.toFixed(2)], learning_rate_r1: +fit.lr1.toFixed(3), choice_noise: +fit.sig_s.toFixed(3),
+           n0_ideal: +(2 / p.snr ** 2).toFixed(3), evidence_weight: +((2 / p.snr ** 2) / fit.n0).toFixed(3),
+           final_belief_logAB: +fit.beliefs.at(-1).toFixed(3) }, tell_diminishing: settings.tell, show_per_1k: settings.perk };
+  const games = load(); games.push(rec); save(games);
+  game.result = { sb, sc, eff, half, rec, fit };
+  renderResult(); renderHistory(); show('v-result');
+}
+function renderResult() {
+  const { p } = game, { sb, sc, eff, half, fit } = game.result;
+  const o = p.better === 'A' ? 1 : -1, more = v => { const x = (Math.exp(v) - 1) * 100; return (x >= 0 ? '+' : '') + x.toFixed(0) + '%'; };
+  const n0i = 2 / p.snr ** 2, om = v => v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2);
+  const [mlo, mhi] = o > 0 ? [fit.mu0_lo, fit.mu0_hi] : [-fit.mu0_hi, -fit.mu0_lo];
+  $('r-fit').innerHTML = [
+    [more(o * fit.mu0), `prior: how much more you first acted as if market ${p.better} pays (80%: ${more(mlo)} to ${more(mhi)}; truth ${more(p.delta)})`],
+    [fit.n0.toFixed(1) + ' rounds', `prior strength n0 (80%: ${fit.n0_lo.toFixed(1)} to ${fit.n0_hi >= 99 ? '100+, the top of the grid' : fit.n0_hi.toFixed(1)}). Ideal for this game: ${n0i < 1 ? n0i.toFixed(2) : n0i.toFixed(1)}`],
+    ['×' + om(n0i / fit.n0), `evidence weight vs an ideal Bayesian (80%: ×${om(n0i / fit.n0_hi)} to ×${om(n0i / fit.n0_lo)}). 1 = ideal; below 1 = you underweighted the revenue feedback; above 1 = you overreacted to it`],
+    [Math.round(fit.lr1 * 100) + '%', `learning rate: how far round 1's signal moved your belief (${Math.round(100 / (fit.n0 + 5))}% by round 5). Ideal: ${Math.round(100 / (n0i + 1))}%, then ${Math.round(100 / (n0i + 5))}%`],
+    ['±' + Math.round(fit.sig_s * 100) + ' pts', 'choice noise: how far your splits strayed from the best split for your belief'],
+    [more(o * fit.beliefs.at(-1)), `belief before your last round about how much more market ${p.better} pays`]
+  ].map(([b, s]) => `<div class="stat"><b class="num">${b}</b><span>${s}</span></div>`).join('');
+  const yb = fit.y.map(v => o * v), bb = fit.beliefs.map(v => o * v), all = [...bb, p.delta, ...yb.map(v => Math.max(-2.5, Math.min(2.5, v)))];
+  const blo = Math.floor(Math.min(...all) * 2) / 2, bhi = Math.ceil(Math.max(...all) * 2) / 2;
+  drawChart($('c-belief'), bb, { color: 'var(--a)', dots: yb, ref: [[p.delta, 'var(--best)', '6 4']], y0: blo, y1: Math.max(bhi, blo + 0.5), label: more });
+  const last = sb[sb.length - 1];
+  $('r-headline').innerHTML = `Market <span class="tag-${p.better.toLowerCase()}">${p.better}</span> was better. The best split put ${pct(p.sStar)} into it.`;
+  $('r-stats').innerHTML = [
+    [`${sc.drop >= 0 ? '+' : ''}${sc.drop.toFixed(1)} pp`, 'learning score: how far the fitted line drops from round 1 to the last round'],
+    [pct(last), `your last split to market ${p.better} (best: ${pct(p.sStar)})`],
+    [(eff * 100).toFixed(1) + '%', 'of the best split\'s expected revenue, averaged over your rounds (noise removed)'],
+    [(half * 100).toFixed(1) + '%', 'what a fixed 50/50 split would have earned on the same scale']
+  ].map(([b, s]) => `<div class="stat"><b class="num">${b}</b><span>${s}</span></div>`).join('');
+  const n = sb.length, gap1 = sc.mean - sc.b * (n - 1) / 2;
+  $('r-score-note').textContent = `Your distance from the best split started near ${(gap1 * 100).toFixed(0)} points on the fitted line and ended near ${((gap1 + sc.b * (n - 1)) * 100).toFixed(0)}. `
+    + `Noise SD was ${p.sigma.toFixed(2)} in log revenue, so a single round's revenue in one market could easily land between ${(Math.exp(-p.sigma) * 100).toFixed(0)}% and ${(Math.exp(p.sigma) * 100).toFixed(0)}% of its expected value.`;
+  $('r-params').innerHTML = '<tr><th>Setting</th><th>Value</th><th>Meaning</th></tr>' + [
+    ['Better market', p.better, 'chosen at random'],
+    ['Market gap δ', p.delta, `the better market pays ${Math.round((Math.exp(p.delta) - 1) * 100)}% more at the same spend`],
+    ['Curvature α', p.alpha.toFixed(2), 'revenue ∝ spend^α; lower = stronger diminishing returns'],
+    ['Signal-to-noise', p.snr.toFixed(2), 'δ ÷ noise SD'],
+    ['Noise SD σ', p.sigma.toFixed(2), 'SD of each market\'s log revenue, each round'],
+    ['Rounds', p.rounds, ''],
+    ['Best split', pct(p.sStar), '1 / (1 + exp(−δ / (1 − α))), capped at 95%']
+  ].map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td style="text-align:left;font-family:var(--f-body)">${r[2]}</td></tr>`).join('');
+  drawChart($('c-share'), sb.map(s => s * 100), { extra: [[fit.fitted.map(s => (o > 0 ? s : 1 - s) * 100), 'var(--a)']], ref: [[p.sStar * 100, 'var(--best)', '6 4'], [50, 'var(--muted)', '2 3']], y0: 0, y1: 100, label: v => v.toFixed(0) + '%' });
+  const line = sc.gap.map((_, i) => (sc.mean + sc.b * (i + 1 - (n + 1) / 2)) * 100);
+  drawChart($('c-gap'), sc.gap.map(g => g * 100), { fit: line, y0: 0, y1: Math.max(10, Math.ceil(Math.max(...sc.gap.map(g => g * 100), ...line) / 10) * 10), label: v => v.toFixed(0) + ' pts' });
+}
+function drawChart(svg, ys, o) {
+  const W = 360, H = 220, L = 46, R = 12, T = 12, B = 30, n = ys.length;
+  const x = i => L + (n === 1 ? 0 : i * (W - L - R) / (n - 1)), y = v => T + (o.y1 - v) / (o.y1 - o.y0) * (H - T - B);
+  let s = '';
+  for (let k = 0; k <= 4; k++) { const v = o.y0 + k * (o.y1 - o.y0) / 4;
+    s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${o.label(v)}</text>`; }
+  ys.forEach((_, i) => { if (n <= 10 || i % 2 === 0 || i === n - 1) s += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${i + 1}</text>`; });
+  (o.ref || []).forEach(([v, c, d]) => s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="2" stroke-dasharray="${d}"/>`);
+  (o.extra || []).forEach(([v, c]) => s += `<polyline fill="none" stroke="${c}" stroke-width="2" points="${v.map((w, i) => x(i) + ',' + y(w)).join(' ')}"/>`);
+  (o.dots || []).forEach((v, i) => { const w = Math.max(o.y0, Math.min(o.y1, v)); s += `<circle cx="${x(i)}" cy="${y(w)}" r="3.5" fill="none" stroke="var(--muted)" stroke-width="1.5"><title>Signal from round ${i + 1}: ${o.label(v)}</title></circle>`; });
+  if (o.fit) s += `<line x1="${x(0)}" x2="${x(n - 1)}" y1="${y(o.fit[0])}" y2="${y(o.fit[n - 1])}" stroke="var(--good)" stroke-width="2"/>`;
+  const col = o.color || 'var(--ink)';
+  s += `<polyline fill="none" stroke="${col}" stroke-width="2" points="${ys.map((v, i) => x(i) + ',' + y(v)).join(' ')}"/>`;
+  ys.forEach((v, i) => s += `<circle cx="${x(i)}" cy="${y(v)}" r="4.5" fill="${col}" stroke="var(--panel)" stroke-width="2"><title>Round ${i + 1}: ${o.label(v)}</title></circle>`);
+  svg.innerHTML = s;
+}
+
+// ── history ──
+function renderHistory() {
+  const g = load();
+  $('h-empty').hidden = g.length > 0;
+  $('h-table').innerHTML = g.length ? '<tr><th>#</th><th>δ</th><th>α</th><th>SNR</th><th>Rounds</th><th>Best</th><th>Your last</th><th>Score</th><th>Revenue eff.</th><th>Prior n0</th></tr>'
+    + g.map((r, i) => `<tr><td>${i + 1}</td><td>${r.delta}</td><td>${r.alpha.toFixed(2)}</td><td>${r.snr.toFixed(2)}</td><td>${r.rounds}</td><td>${pct(r.best_share)}</td>`
+      + `<td>${pct(r.better === 'A' ? r.shares_A.at(-1) : 1 - r.shares_A.at(-1))}</td><td>${r.score_pp >= 0 ? '+' : ''}${r.score_pp} pp</td><td>${(r.efficiency * 100).toFixed(1)}%</td><td>${r.fit ? r.fit.prior_strength_n0.toFixed(1) : '–'}</td></tr>`).reverse().join('') : '';
+}
+async function copyJSON() {
+  const txt = JSON.stringify(load(), null, 1);
+  try { await navigator.clipboard.writeText(txt); $('h-msg').textContent = `Copied ${load().length} games.`; }
+  catch { $('h-msg').textContent = 'Copy was blocked here. Select the text below and copy it.'; $('h-msg').insertAdjacentHTML('beforeend', `<textarea style="width:100%;height:120px;margin-top:8px">${txt}</textarea>`); }
+}
+let clearArmed = false;
+function clearGames() {
+  if (!clearArmed) { clearArmed = true; $('b-clear').textContent = 'Click again to clear'; setTimeout(() => { clearArmed = false; $('b-clear').textContent = 'Clear'; }, 3000); return; }
+  save([]); clearArmed = false; $('b-clear').textContent = 'Clear'; $('h-msg').textContent = 'Cleared.'; renderHistory();
+}
+
+function show(id) { ['v-setup', 'v-play', 'v-result'].forEach(v => $(v).hidden = v !== id); window.scrollTo({ top: 0 }); }
+
+$('b-start').onclick = start;
+$('b-invest').onclick = invest;
+$('p-slider').oninput = renderSplit;
+$('b-again').onclick = () => { game = { p: drawParams(settings), hist: [], started: new Date().toISOString() }; $('p-slider').value = 50; show('v-play'); renderPlay(); };
+$('b-setup').onclick = () => show('v-setup');
+$('b-copy').onclick = copyJSON;
+$('b-clear').onclick = clearGames;
+renderHistory();
+
+// keep an unfinished game across page updates
+window.claude?.hot?.snapshot?.(() => ({ settings, game }));
+const boot = d => { if (d && d.game && !d.game.result) { settings = d.settings; game = d.game; show('v-play'); renderPlay(); } };
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
