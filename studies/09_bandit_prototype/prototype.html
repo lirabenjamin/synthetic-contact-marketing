@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SunCell sales game (prototype)</title>
+<style>
+  :root { --R: #b91c1c; --R-bg: #fef2f2; --D: #1d4ed8; --D-bg: #eff6ff; --ink: #111827; --muted: #6b7280; --line: #e5e7eb; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #f3f4f6; line-height: 1.5; }
+  .page { max-width: 820px; margin: 2rem auto; background: #fff; border-radius: 12px; padding: 2rem 2.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size: 1.4rem; margin-bottom: .75rem; }
+  h3 { font-size: 1.05rem; }
+  p { margin-bottom: .8rem; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  .primary-btn { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: .7rem 1.6rem; font-size: 1rem; font-weight: 600; cursor: pointer; }
+  .primary-btn:hover:not(:disabled) { background: #1d4ed8; }
+  .primary-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .actions { margin-top: 1.25rem; text-align: right; }
+
+  /* top bar */
+  .topbar { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: .75rem; margin-bottom: 1.1rem; }
+  .topbar .week { font-size: 1.15rem; font-weight: 700; }
+  .topbar .stat { text-align: right; font-size: .92rem; color: var(--muted); }
+  .topbar .stat strong { color: var(--ink); font-size: 1.05rem; }
+  .visits-left { display: flex; gap: 5px; margin: .4rem 0 0; }
+  .pip { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #9ca3af; }
+  .pip.used { background: #9ca3af; }
+
+  /* counties */
+  .counties { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .county { border: 2px solid var(--line); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; }
+  .county.R { border-color: #fecaca; background: var(--R-bg); }
+  .county.D { border-color: #bfdbfe; background: var(--D-bg); }
+  .county h3.R { color: var(--R); } .county h3.D { color: var(--D); }
+  .county .desc { font-size: .85rem; color: var(--muted); margin-bottom: .75rem; }
+  .visit-btn { border: 0; border-radius: 10px; padding: .9rem; font-size: 1.05rem; font-weight: 700; color: #fff; cursor: pointer; transition: transform .05s; }
+  .visit-btn.R { background: var(--R); } .visit-btn.D { background: var(--D); }
+  .visit-btn:active:not(:disabled) { transform: scale(.98); }
+  .visit-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 6px; min-height: 52px; margin-top: .85rem; }
+  .tile { width: 46px; height: 46px; border-radius: 8px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; }
+  .tile small { font-size: .6rem; font-weight: 500; color: var(--muted); line-height: 1; }
+  .tile.new { animation: pop .45s ease-out; }
+  body.noanim .tile.new { animation: none; }
+  @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
+  .county-week { font-size: .88rem; color: var(--muted); margin-top: .5rem; }
+
+  /* freshness meter (version b) */
+  .fresh { margin: .2rem 0 .75rem; }
+  .fresh-label { font-size: .8rem; color: var(--muted); display: flex; justify-content: space-between; }
+  .fresh-bar { height: 10px; background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 3px; }
+  .fresh-fill { height: 100%; transition: width .3s; }
+  .R .fresh-fill { background: var(--R); } .D .fresh-fill { background: var(--D); }
+  .schedule { display: flex; gap: 4px; margin-top: .5rem; font-size: .72rem; color: var(--muted); }
+  .schedule span { flex: 1; text-align: center; padding: 2px 0; border-radius: 4px; background: #fff; border: 1px solid var(--line); }
+  .schedule span.next { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+  .schedule span.done { opacity: .35; }
+
+  /* last-visit banner */
+  .banner { margin: 1rem 0 0; min-height: 3rem; text-align: center; font-size: 1.15rem; padding: .7rem; border-radius: 10px; background: #f9fafb; border: 1px solid var(--line); }
+  .banner .big { font-weight: 800; }
+  .banner.R .big { color: var(--R); } .banner.D .big { color: var(--D); }
+
+  /* history */
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .5rem; }
+  th, td { text-align: center; padding: .35rem .3rem; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  td.R { color: var(--R); } td.D { color: var(--D); }
+  .history-title { margin-top: 1.5rem; font-size: .95rem; }
+
+  /* week-end modal */
+  .overlay { position: fixed; inset: 0; background: rgba(17,24,39,.45); display: flex; align-items: center; justify-content: center; }
+  .modal { background: #fff; border-radius: 12px; padding: 1.75rem 2rem; width: min(520px, 92vw); text-align: center; }
+  .modal .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: 1rem 0; }
+  .modal .cell { border-radius: 10px; padding: .75rem; }
+  .modal .cell.R { background: var(--R-bg); color: var(--R); } .modal .cell.D { background: var(--D-bg); color: var(--D); }
+  .modal .num { font-size: 1.6rem; font-weight: 800; }
+
+  /* belief slider */
+  .belief { margin: 1.25rem 0; }
+  .belief input[type=range] { width: 100%; }
+  .belief .ends { display: flex; justify-content: space-between; font-size: .85rem; font-weight: 600; }
+  .belief .ends .R { color: var(--R); } .belief .ends .D { color: var(--D); }
+  .belief .readout { text-align: center; margin-top: .5rem; font-weight: 600; min-height: 1.5rem; }
+
+  .tut-cards { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: .75rem 0 1rem; }
+  .tut-cards .county { padding: .75rem; }
+  ul.rules { margin: .25rem 0 1rem 1.2rem; } ul.rules li { margin-bottom: .35rem; }
+
+  /* researcher panel */
+  .dev { position: fixed; right: 12px; bottom: 12px; background: #111827; color: #e5e7eb; font-size: .78rem; padding: .7rem .8rem; border-radius: 10px; width: 250px; }
+  .dev b { color: #fff; } .dev a { color: #93c5fd; } .dev div { margin-bottom: .3rem; }
+</style>
+</head>
+<body>
+<div class="page" id="app"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// SunCell sales game, click-bandit prototype. Two versions:
+//   v=a  constant payouts: every visit to a county has the same expected sales
+//        all game; sending every visit to the better county is optimal.
+//   v=b  visible diminishing returns: within a week, each extra visit to the same
+//        county reaches fewer fresh customers (schedule shown on screen); the pool
+//        refills every week. Only each county's strength is unknown.
+// Sales per visit ~ Poisson(mean). Every number below can be overridden by URL
+// parameter, e.g. prototype.html?v=b&r=4&d=2&decay=0.8&seed=7&dev=1
+// ---------------------------------------------------------------------------
+const Q = new URLSearchParams(location.search);
+const num = (k, def) => (Q.has(k) ? Number(Q.get(k)) : def);
+const VERSION = Q.get('v') === 'b' ? 'b' : 'a';
+const CFG = {
+  weeks: num('weeks', 10),
+  visits: num('visits', 10),
+  meanR: num('r', VERSION === 'a' ? 2.6 : 4.0),   // expected sales, Riverton (first visit of the week in v=b)
+  meanD: num('d', VERSION === 'a' ? 2.0 : 2.0),   // expected sales, Lakewood
+  decay: num('decay', 0.8),                        // v=b: each extra visit in a week sells this fraction of the previous one
+  centsPerSale: num('cents', 0.5),                 // real bonus per sale
+  seed: num('seed', Math.floor(Math.random() * 1e9)),
+  flip: Q.get('flip') === '1',                     // swap which county is better (D-world)
+};
+const DEV = Q.get('dev') === '1';
+const SHOT = Q.get('shot');
+
+const COUNTY = {
+  R: { name: 'Riverton County', desc: 'Republican-leaning: 70% of voters chose the Republican candidate' },
+  D: { name: 'Lakewood County', desc: 'Democratic-leaning: 70% of voters chose the Democratic candidate' },
+};
+const strength = c => (CFG.flip ? (c === 'R' ? CFG.meanD : CFG.meanR) : (c === 'R' ? CFG.meanR : CFG.meanD));
+
+// Seeded PRNG (mulberry32) + Poisson draw, so a seed reproduces a whole game
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const rand = mulberry32(CFG.seed);
+function poisson(lambda) { const L = Math.exp(-lambda); let k = 0, p = 1; do { k++; p *= rand(); } while (p > L); return k - 1; }
+
+const freshness = k => (VERSION === 'b' ? Math.pow(CFG.decay, k) : 1); // k = visits already made to this county this week
+const expectedSales = (c, k) => strength(c) * freshness(k);
+
+// --------------------------------- state -----------------------------------
+const S = {
+  screen: 'intro', belief: null, week: 1, log: [],
+  weekVisits: { R: [], D: [] }, lastVisit: null, busy: false, showWeekEnd: false,
+};
+const totalSales = () => S.log.reduce((s, v) => s + v.sales, 0);
+const bonus = () => (totalSales() * CFG.centsPerSale / 100);
+const usedThisWeek = () => S.weekVisits.R.length + S.weekVisits.D.length;
+const fmt$ = x => '$' + x.toFixed(2);
+
+function visit(c) {
+  if (S.busy || usedThisWeek() >= CFG.visits) return;
+  const k = S.weekVisits[c].length;
+  const sales = poisson(expectedSales(c, k));
+  S.weekVisits[c].push(sales);
+  const rec = { week: S.week, visit_in_week: usedThisWeek(), county: c, county_visit_in_week: k + 1, freshness: freshness(k), sales, t: Date.now() };
+  S.log.push(rec); S.lastVisit = rec;
+  if (usedThisWeek() >= CFG.visits) S.showWeekEnd = true;
+  S.busy = true; render(); setTimeout(() => { S.busy = false; render(); }, SHOT ? 0 : 350);
+}
+function nextWeek() {
+  if (S.week >= CFG.weeks) { S.screen = 'end'; S.showWeekEnd = false; render(); return; }
+  S.week++; S.weekVisits = { R: [], D: [] }; S.lastVisit = null; S.showWeekEnd = false; render();
+}
+
+// --------------------------------- views -----------------------------------
+const h = (strings, ...vals) => strings.reduce((s, str, i) => s + str + (i < vals.length ? vals[i] : ''), '');
+
+function introView() {
+  const b = VERSION === 'b';
+  return h`
+  <h2>Selling SunCell solar panels</h2>
+  <p>You are the regional sales manager for <b>SunCell</b>, a company that sells rooftop solar panels. You can send your sales team to two nearby counties:</p>
+  <div class="tut-cards">
+    ${['R', 'D'].map(c => h`<div class="county ${c}"><h3 class="${c}">${COUNTY[c].name}</h3><div class="desc" style="margin:0">${COUNTY[c].desc}</div></div>`).join('')}
+  </div>
+  <ul class="rules">
+    <li>The game lasts <b>${CFG.weeks} weeks</b>. Each week you have <b>${CFG.visits} sales visits</b>.</li>
+    <li>For each visit, click the county you want to visit. You see right away how many panels that visit sold.</li>
+    <li>The two counties may differ in how many panels a visit usually sells. Sales also vary from visit to visit by luck.</li>
+    ${b ? h`<li>Within a week, the first visit to a county reaches the most eager customers. <b>Each extra visit to the same county in the same week sells about ${Math.round((1 - CFG.decay) * 100)}% less</b> than the visit before. Every week, the customers in both counties are fresh again.</li>` : h`<li>How many panels a county usually buys per visit stays the same for the whole game.</li>`}
+    <li>Your bonus is <b>${CFG.centsPerSale}¢ per panel sold</b>, paid in real money on top of your base pay.</li>
+  </ul>
+  <div class="actions"><button class="primary-btn" onclick="S.screen='belief';render()">Continue</button></div>`;
+}
+
+function beliefView() {
+  const v = S.belief;
+  const strengthWord = d => (d >= 40 ? 'much more' : d >= 20 ? 'more' : 'a little more');
+  const read = v === 50 ? 'About the same in both counties'
+    : v < 50 ? `Riverton sells ${strengthWord(50 - v)} per visit` : `Lakewood sells ${strengthWord(v - 50)} per visit`;
+  return h`
+  <h2>Before you start</h2>
+  <p>Before any visits: in which county do you expect a sales visit to sell <b>more</b> solar panels?</p>
+  <div class="belief">
+    <div class="ends"><span class="R">Riverton sells much more</span><span>Same</span><span class="D">Lakewood sells much more</span></div>
+    <input type="range" min="0" max="100" step="5" value="${v ?? 50}" oninput="S.belief=+this.value;render()">
+    <div class="readout">${v == null ? '<span class="muted">Move the slider.</span>' : read}</div>
+  </div>
+  <p class="muted">This answer does not affect your bonus.</p>
+  <div class="actions"><button class="primary-btn" ${v == null ? 'disabled' : ''} onclick="S.screen='game';render()">Start week 1</button></div>`;
+}
+
+function countyCard(c) {
+  const vs = S.weekVisits[c], k = vs.length, b = VERSION === 'b';
+  const full = usedThisWeek() >= CFG.visits;
+  const weekSales = vs.reduce((s, x) => s + x, 0);
+  const fresh = b ? h`
+    <div class="fresh">
+      <div class="fresh-label"><span>Fresh customers for your next visit</span><b>${Math.round(freshness(k) * 100)}%</b></div>
+      <div class="fresh-bar"><div class="fresh-fill" style="width:${freshness(k) * 100}%"></div></div>
+      <div class="schedule">${Array.from({ length: 6 }, (_, i) => `<span class="${i < k ? 'done' : i === k ? 'next' : ''}">${i + 1}${i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'}<br>${Math.round(freshness(i) * 100)}%</span>`).join('')}</div>
+    </div>` : '';
+  return h`
+  <div class="county ${c}">
+    <h3 class="${c}">${COUNTY[c].name}</h3>
+    <div class="desc">${COUNTY[c].desc}</div>
+    ${fresh}
+    <button class="visit-btn ${c}" ${S.busy || full ? 'disabled' : ''} onclick="visit('${c}')">Visit ${COUNTY[c].name.split(' ')[0]}</button>
+    <div class="tiles">${vs.map((x, i) => `<div class="tile ${S.lastVisit && S.lastVisit.county === c && i === vs.length - 1 ? 'new' : ''}">${x}<small>sold</small></div>`).join('')}</div>
+    <div class="county-week">This week: ${k} visit${k === 1 ? '' : 's'}, ${weekSales} panel${weekSales === 1 ? '' : 's'} sold</div>
+  </div>`;
+}
+
+function historyTable() {
+  if (S.week === 1 && !S.showWeekEnd && S.screen === 'game') return '';
+  const rows = [];
+  for (let w = 1; w <= S.week; w++) {
+    const wl = S.log.filter(v => v.week === w);
+    if (!wl.length || (w === S.week && !S.showWeekEnd && S.screen === 'game')) continue;
+    const agg = c => { const x = wl.filter(v => v.county === c); return { n: x.length, s: x.reduce((a, v) => a + v.sales, 0) }; };
+    const r = agg('R'), d = agg('D');
+    rows.push(`<tr><td>${w}</td><td class="R">${r.n}</td><td class="R">${r.s}</td><td class="D">${d.n}</td><td class="D">${d.s}</td><td><b>${r.s + d.s}</b></td></tr>`);
+  }
+  if (!rows.length) return '';
+  return h`<h4 class="history-title">Past weeks</h4>
+  <table><tr><th>Week</th><th>Riverton visits</th><th>Riverton sold</th><th>Lakewood visits</th><th>Lakewood sold</th><th>Total sold</th></tr>${rows.reverse().join('')}</table>`;
+}
+
+function gameView() {
+  const used = usedThisWeek(), lv = S.lastVisit;
+  const banner = lv
+    ? h`<div class="banner ${lv.county}">Your visit to ${COUNTY[lv.county].name.split(' ')[0]} sold <span class="big">${lv.sales} panel${lv.sales === 1 ? '' : 's'}</span></div>`
+    : h`<div class="banner"><span class="muted">Click a county to make your ${used === 0 ? 'first' : 'next'} visit of the week.</span></div>`;
+  const weekEnd = S.showWeekEnd ? (() => {
+    const s = c => S.weekVisits[c].reduce((a, x) => a + x, 0);
+    return h`<div class="overlay"><div class="modal">
+      <h2>Week ${S.week} done</h2>
+      <div class="grid">${['R', 'D'].map(c => `<div class="cell ${c}"><div>${COUNTY[c].name.split(' ')[0]}</div><div class="num">${s(c)}</div><div>sold in ${S.weekVisits[c].length} visit${S.weekVisits[c].length === 1 ? '' : 's'}</div></div>`).join('')}</div>
+      <p>Bonus so far: <b>${fmt$(bonus())}</b></p>
+      <button class="primary-btn" onclick="nextWeek()">${S.week >= CFG.weeks ? 'See final results' : `Start week ${S.week + 1}`}</button>
+    </div></div>`;
+  })() : '';
+  return h`
+  <div class="topbar">
+    <div><div class="week">Week ${S.week} of ${CFG.weeks}</div>
+      <div class="visits-left">${Array.from({ length: CFG.visits }, (_, i) => `<div class="pip ${i < used ? 'used' : ''}"></div>`).join('')}</div>
+      <div class="muted" style="font-size:.8rem">${CFG.visits - used} visit${CFG.visits - used === 1 ? '' : 's'} left this week</div></div>
+    <div class="stat">Panels sold: <strong>${totalSales()}</strong><br>Bonus so far: <strong>${fmt$(bonus())}</strong></div>
+  </div>
+  <div class="counties">${countyCard('R')}${countyCard('D')}</div>
+  ${banner}
+  ${historyTable()}
+  ${weekEnd}`;
+}
+
+function endView() {
+  const n = c => S.log.filter(v => v.county === c).length;
+  const blob = encodeURIComponent(JSON.stringify({ version: VERSION, config: CFG, belief: S.belief, visits: S.log }, null, 1));
+  return h`
+  <h2>Game over</h2>
+  <p>You sold <b>${totalSales()} panels</b> and earned a bonus of <b>${fmt$(bonus())}</b>.</p>
+  <p>You made ${n('R')} visits to Riverton and ${n('D')} to Lakewood.</p>
+  ${historyTable()}
+  <p class="muted" style="margin-top:1rem"><a download="bandit_game_log.json" href="data:application/json,${blob}">Download this game's visit log (JSON)</a></p>`;
+}
+
+// ------------------------------ researcher panel ----------------------------
+function devPanel() {
+  if (!DEV) return '';
+  const opt = (() => { // best possible expected sales per week
+    let k = { R: 0, D: 0 }, tot = 0;
+    for (let i = 0; i < CFG.visits; i++) { const c = expectedSales('R', k.R) >= expectedSales('D', k.D) ? 'R' : 'D'; tot += expectedSales(c, k[c]); k[c]++; }
+    return { tot, k };
+  })();
+  const link = (set, drop = []) => { const q = new URLSearchParams(location.search); Object.entries(set).forEach(([a, b]) => q.set(a, b)); drop.forEach(k => q.delete(k)); return '?' + q.toString(); };
+  return h`<div class="dev">
+    <div><b>Researcher panel</b> (hidden from participants)</div>
+    <div>Version: <b>${VERSION}</b> · <a href="${link({ v: VERSION === 'a' ? 'b' : 'a' }, ['r', 'd'])}">switch to ${VERSION === 'a' ? 'b' : 'a'}</a></div>
+    <div>Truth: Riverton ${strength('R')}, Lakewood ${strength('D')} sales/visit${VERSION === 'b' ? `, decay ${CFG.decay}` : ''}</div>
+    <div>Best weekly plan: ${opt.k.R} Riverton / ${opt.k.D} Lakewood, ${opt.tot.toFixed(1)} sales/week</div>
+    <div>Seed ${CFG.seed} · <a href="${link({ seed: Math.floor(Math.random() * 1e9) })}">new luck</a></div>
+  </div>`;
+}
+
+function render() {
+  const view = { intro: introView, belief: beliefView, game: gameView, end: endView }[S.screen];
+  document.getElementById('app').innerHTML = view();
+  const old = document.querySelector('.dev'); if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', devPanel());
+}
+
+// ------------------- screenshot states (?shot=...) for docs -------------------
+// A simple greedy-with-noise player gets the game to a given state.
+function autoplay(nVisits) {
+  for (let i = 0; i < nVisits; i++) {
+    if (S.showWeekEnd) nextWeek();
+    if (S.screen !== 'game') return;
+    const c = rand() < (VERSION === 'a' ? 0.6 : 0.5) ? (S.weekVisits.R.length <= 6 ? 'R' : 'D') : 'D';
+    S.busy = false; visit(c);
+  }
+  S.busy = false;
+}
+if (SHOT) {
+  document.body.classList.add('noanim');
+  if (SHOT === 'belief') { S.screen = 'belief'; S.belief = 35; }
+  if (SHOT === 'game0') { S.screen = 'game'; S.belief = 35; }
+  if (SHOT === 'game') { S.screen = 'game'; S.belief = 35; autoplay(26); }
+  if (SHOT === 'weekend') { S.screen = 'game'; S.belief = 35; autoplay(30); }
+  if (SHOT === 'end') { S.screen = 'game'; S.belief = 35; autoplay(CFG.weeks * CFG.visits); nextWeek(); }
+}
+render();
+</script>
+</body>
+</html>
