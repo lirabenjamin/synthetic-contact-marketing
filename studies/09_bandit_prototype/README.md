@@ -1,23 +1,8 @@
 # 09 Click-bandit prototype of the SunCell game
 
-Standalone, playable prototype of a redesigned allocation game (prompted by the 08 pilot, where people hedged near 50/50 and the blended per-round revenue mixed county quality with diminishing returns). Each of 10 weeks has 10 sales visits; each click sends one visit to Riverton (R-leaning) or Lakewood (D-leaning) and shows the panels sold right away. Bonus: real cents per panel sold. A belief question comes before any feedback.
+Standalone, playable prototype of the redesigned allocation game: a two-armed bandit framed as money in, money out (BenBen, 2026-11-07). The player has a $100,000 budget and invests it $1,000 at a time. Each click invests in Riverton (R-leaning) or Lakewood (D-leaning) and shows the sales money that came back, with a green number rising from the button. Each county's average return is fixed for the whole game: $1.35 back per $1 in Riverton, $1.00 in Lakewood. One return is Gamma-distributed with the same mean and noise as the Poisson sales in `simulate.py`. Bonus: 3¢ per $1,000 of profit (about $1.05 if everything goes to Riverton, $0 if everything goes to Lakewood). The tutorial has 3 screens and a 2-question check; there is no belief question, no weeks and no diminishing returns, and county cards are neutral gray.
 
-Open `prototype.html` in a browser. URL parameters:
-
-| Param | Meaning | Default |
-|---|---|---|
-| `v` | `a` = constant payouts (best play: every visit to the better county); `b` = visible diminishing returns within a week, fresh customers each week | `a` |
-| `r`, `d` | Expected sales per visit, Riverton / Lakewood (first visit of the week in `b`) | a: 2.6 / 2.0; b: 4 / 2 |
-| `decay` | `b` only: each extra visit to a county in a week sells this fraction of the previous one | 0.8 |
-| `cents` | Bonus per panel sold, in cents | 0.5 |
-| `weeks`, `visits` | Weeks, visits per week | 10, 10 |
-| `seed` | Luck seed (reproduces a game) | random |
-| `flip=1` | Lakewood is the better county | off |
-| `dev=1` | Researcher panel: truth, best weekly plan, version switch | off |
-
-Sales per visit are Poisson. The end screen offers the full visit log as JSON. Parameter values are placeholders until a simulation picks the gap and noise.
-
-`screenshots/` holds static renders (`?shot=belief|game0|game|weekend|end` drives the game to that state with an automatic player).
+Open `prototype.html` in a browser. URL parameters: `r`, `d` (average $ back per $1, defaults 1.35 / 1.00), `kr`, `kd` (noise shape, defaults 2.7 / 2.0; SD of one return = mean / sqrt(shape)), `budget`, `unit`, `cents` (bonus per $1,000 profit), `seed`, `dev=1` (researcher panel with the truth). The end screen offers the investment log as JSON. `screenshots/` holds static renders (`?shot=tut1|tut2|tut3|game0|game|end`).
 
 ## Design simulation (`simulate.py`, version a)
 
