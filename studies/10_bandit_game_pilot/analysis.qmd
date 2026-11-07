@@ -1,0 +1,234 @@
+---
+title: "Investment-game (bandit) pilot (Prolific, Nov 2026)"
+subtitle: "Democrats invest $100,000 in $1,000 clicks in Riverton (R) or Lakewood (D) after chatting with a Republican persona bot or a cats-vs-dogs control bot"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(tidyverse)
+library(jsonlite)
+library(knitr)
+knitr::opts_chunk$set(dpi = 150, fig.width = 8, fig.height = 4.5)
+options(knitr.kable.NA = "–")
+theme_set(theme_minimal(base_size = 12) + theme(panel.grid.minor = element_blank()))
+
+PROC <- "data/processed"
+pull_log <- fromJSON("data/pull_log.json")
+UNIT <- 1000; N_INVEST <- 100; MEAN_R <- 1.35; MEAN_D <- 1.00
+COND_COLORS <- c(control = "#9ca3af", treatment = "#2563eb")
+COND_LABELS <- c(control = "Control (cats-vs-dogs bot)", treatment = "Treatment (Republican persona bot)")
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+
+parts <- read_csv(file.path(PROC, "participants.csv"), show_col_types = FALSE) |>
+  mutate(across(c(started_at, completed_at, game_finished_at, starts_with("ts_")), ymd_hms),
+         completed = !is.na(completed_at))
+inv <- read_csv(file.path(PROC, "investments.csv"), show_col_types = FALSE) |>
+  mutate(R = county == "R", saved_at = ymd_hms(saved_at))
+screen <- read_csv(file.path(PROC, "screenouts.csv"), show_col_types = FALSE)
+errors <- read_csv(file.path(PROC, "client_errors.csv"), show_col_types = FALSE)
+chats <- read_csv(file.path(PROC, "chat_messages.csv"), show_col_types = FALSE)
+done <- parts |> filter(completed, n_investments_saved == N_INVEST)
+n_by <- count(done, condition) |> deframe()
+```
+
+## Snapshot
+
+Data pulled `r format(with_tz(ymd_hms(pull_log$pulled_at), "America/New_York"), "%Y-%m-%d %H:%M")` ET from MongoDB `twins-bandit-game` and the chatbot's Postgres log (Prolific study `r pull_log$prolific_study_id`; app tag `v3.0.0-bandit-pilot`).
+
+**Design.** Democrats who pass screening chat for 5 minutes with a Republican persona bot (treatment) or a bot that debates cats vs dogs (control). They then invest a $100,000 budget in 100 clicks of $1,000. Each click goes to Riverton County (Republican-leaning) or Lakewood County (Democratic-leaning) and shows the money that came back right away. A $1,000 investment brings back $1,350 on average in Riverton and $1,000 in Lakewood, with large luck: one return's SD is 61% (Riverton) and 71% (Lakewood) of its mean. Sending every click to Riverton is best. The k-th treated and k-th control participant face the same sequence of returns. The bonus maps money back from $100,000 (expected if every click goes to Lakewood) to $135,000 (every click to Riverton) onto $0 to $1.00.
+
+This pilot has `r nrow(done)` complete participants (`r n_by["treatment"]` treatment, `r n_by["control"]` control). Every condition comparison below is descriptive; its purpose is to check that the game works and to size the main study.
+
+## 1. Flow, timing and data quality
+
+```{r flow}
+tibble(
+  Step = c("Screened out before assignment", "Assigned", "Completed (all 100 clicks and demographics)"),
+  Total = c(nrow(screen), nrow(parts), nrow(done)),
+  Treatment = c(NA, sum(parts$condition == "treatment"), n_by["treatment"]),
+  Control = c(NA, sum(parts$condition == "control"), n_by["control"])
+) |> kable(caption = "Participant flow (counts of people).")
+
+# Screen timestamps come from the participant's browser clock; drop people whose clock is off by more
+# than 5 minutes (browser time at assignment vs the server's assignment time).
+times <- done |>
+  mutate(skew_min = abs(as.numeric(difftime(ts_chat_intro, started_at, units = "mins")))) |>
+  filter(skew_min < 5) |>
+  mutate(total_min = as.numeric(difftime(completed_at, ts_attention_math, units = "mins")),
+         game_min = as.numeric(difftime(game_finished_at, ts_game, units = "mins")),
+         tut_min = as.numeric(difftime(ts_game, ts_game_tutorial, units = "mins")))
+```
+
+Median time from the consent click to the end was `r fmt(median(times$total_min, na.rm = TRUE), 1)` minutes (range `r fmt(min(times$total_min, na.rm = TRUE), 1)`–`r fmt(max(times$total_min, na.rm = TRUE), 1)`); pay covers 10 minutes. Timing excludes `r nrow(done) - nrow(times)` participants whose browser clocks were off by hours. The instructions took a median of `r fmt(median(times$tut_min, na.rm = TRUE), 1)` minutes and the 100 clicks `r fmt(median(times$game_min, na.rm = TRUE), 1)` minutes.
+
+```{r integrity}
+inv_chk <- inv |> group_by(participant_id) |>
+  summarise(gaps = !all(sort(n) == seq_along(n)), .groups = "drop")
+tibble(
+  Check = c("Completers with fewer than 100 saved clicks", "Clicks saved out of order or with gaps",
+            "Clicks where the browser's money back differs from the server's",
+            "Completers whose browser bonus differs from the server bonus (> 1¢)",
+            "Client errors logged", "Treated participants not served the Republican bot",
+            "Control participants not served the cats-vs-dogs bot"),
+  Problems = c(sum(done$n_investments_saved < N_INVEST), sum(inv_chk$gaps), sum(done$n_back_mismatch),
+               sum(abs(done$game_bonus - done$game_bonus_client) > 0.011, na.rm = TRUE), nrow(errors),
+               sum(!parts$participant_id[parts$condition == "treatment"] %in%
+                     chats$participant_id[chats$bot_prompt %in% "republican_persona"]),
+               sum(!parts$participant_id[parts$condition == "control"] %in%
+                     chats$participant_id[chats$bot_prompt %in% "cats_dogs"]))
+) |> kable(caption = "Integrity checks (0 means clean).")
+```
+
+## 2. Learning across the game
+
+```{r curves, fig.height = 4.8}
+blocks <- inv |> filter(participant_id %in% done$participant_id) |>
+  mutate(block = (n - 1) %/% 10 + 1) |>
+  group_by(participant_id, condition, block) |> summarise(share_R = mean(R), .groups = "drop")
+sim <- read_csv("../09_bandit_prototype/output/curves.csv", show_col_types = FALSE) |>
+  filter(ratio == 1.35, n0_med == 20, group %in% c("Control", "Ideal learner")) |>
+  mutate(block = (visit - 1) %/% 10 + 1) |> group_by(group, block) |> summarise(p = mean(p_r), .groups = "drop")
+blocks |> group_by(condition, block) |> summarise(m = mean(share_R), s = se(share_R), .groups = "drop") |>
+  ggplot(aes(block, m, colour = condition)) +
+  geom_line(data = sim, aes(block, p, linetype = group), inherit.aes = FALSE, colour = "black", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = m - s, ymax = m + s, fill = condition), alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1.2) + geom_point(size = 2) +
+  geom_hline(yintercept = 0.5, colour = "grey80") +
+  scale_colour_manual(values = COND_COLORS, labels = COND_LABELS, name = NULL) +
+  scale_fill_manual(values = COND_COLORS, guide = "none") +
+  scale_linetype_manual(values = c(Control = "dotted", `Ideal learner` = "dashed"),
+                        labels = c(Control = "Simulated Democrats (design memo)", `Ideal learner` = "Ideal learner (simulation)"), name = NULL) +
+  scale_x_continuous(breaks = 1:10, labels = paste0(seq(1, 91, 10), "–", seq(10, 100, 10))) +
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  labs(x = "Clicks", y = "Share of clicks to Riverton") +
+  theme(legend.position = "bottom", legend.box = "vertical", axis.text.x = element_text(size = 8))
+```
+
+*Figure 1. Share of clicks sent to Riverton in each block of 10 clicks, by condition (mean ± 1 SE across participants). Black lines come from the design simulation (`studies/09_bandit_prototype`, Riverton 1.35×, prior worth about 20 clicks): dotted, simulated Democrats who start out believing Lakewood is better; dashed, an ideal learner.*
+
+```{r learning-summary}
+pooled <- blocks |> group_by(block) |> summarise(m = mean(share_R), .groups = "drop")
+better <- count(done, pilot_better_county)
+```
+
+People learned, but slowly. Across both conditions the Riverton share rose from `r scales::percent(pooled$m[1], 1)` in clicks 1–10 to `r scales::percent(pooled$m[10], 1)` in clicks 91–100; an ideal learner reaches about 90%. After the game, `r better$n[better$pilot_better_county == "Riverton"]` of `r nrow(done)` people said Riverton brought back more money per $1,000.
+
+## 3. Treatment vs control
+
+```{r tvc}
+per <- inv |> filter(participant_id %in% done$participant_id) |>
+  group_by(participant_id, condition) |>
+  summarise(first_R = as.numeric(R[n == 1]), share_1_10 = mean(R[n <= 10]), share_all = mean(R),
+            share_91_100 = mean(R[n > 90]), .groups = "drop") |>
+  left_join(select(done, participant_id, game_bonus), by = "participant_id")
+outcomes <- c(first_R = "First click to Riverton (before any feedback)", share_1_10 = "Riverton share, clicks 1–10",
+              share_all = "Riverton share, all 100 clicks", share_91_100 = "Riverton share, clicks 91–100",
+              game_bonus = "Bonus ($)")
+tvc <- map_dfr(names(outcomes), function(o) {
+  t <- per[[o]][per$condition == "treatment"]; c <- per[[o]][per$condition == "control"]
+  tt <- t.test(t, c)
+  sp <- sqrt(((length(t) - 1) * var(t) + (length(c) - 1) * var(c)) / (length(t) + length(c) - 2))
+  tibble(Outcome = outcomes[o], `Treatment mean (SE)` = paste0(fmt(mean(t)), " (", fmt(se(t)), ")"),
+         `Control mean (SE)` = paste0(fmt(mean(c)), " (", fmt(se(c)), ")"),
+         `Diff (T − C)` = fmt(mean(t) - mean(c)), `95% CI` = paste0("[", fmt(tt$conf.int[1]), ", ", fmt(tt$conf.int[2]), "]"),
+         p = fmt(tt$p.value), d = fmt((mean(t) - mean(c)) / sp), sd_pooled = sp)
+})
+tvc |> select(-sd_pooled) |> kable(caption = "Treatment minus control, one value per participant. Welch t-test CIs; Cohen's d uses the pooled SD.")
+```
+
+```{r tvc-text}
+d_all <- tvc$d[tvc$Outcome == outcomes["share_all"]]
+diff_all <- as.numeric(tvc$`Diff (T − C)`[tvc$Outcome == outcomes["share_all"]])
+```
+
+Treated participants sent fewer clicks to Riverton than control participants: `r scales::percent(abs(diff_all), 1)` fewer over all 100 clicks (d = `r d_all`), the opposite of the hypothesis. The first click, made before any feedback, barely differs. With `r min(n_by)` people in the smaller condition, a two-sided t-test has 80% power only for d ≥ `r fmt(pwr_d <- power.t.test(n = min(n_by), power = 0.8)$delta, 2)`, so the direction is a hint at most.
+
+```{r individual, fig.height = 3.6}
+per |> mutate(condition = factor(condition, levels = c("control", "treatment"))) |>
+  ggplot(aes(share_all, condition, colour = condition)) +
+  geom_vline(xintercept = 0.5, colour = "grey80") +
+  geom_jitter(height = 0.12, width = 0, size = 2.5, alpha = 0.8) +
+  stat_summary(fun.data = mean_se, colour = "black", geom = "pointrange") +
+  scale_colour_manual(values = COND_COLORS, guide = "none") +
+  scale_y_discrete(labels = COND_LABELS) + scale_x_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(x = "Share of all 100 clicks to Riverton", y = NULL)
+```
+
+*Figure 2. Each dot is one participant's share of clicks to Riverton; black points are condition means ± 1 SE.*
+
+## 4. Response to feedback
+
+```{r feedback}
+fb <- inv |> filter(participant_id %in% done$participant_id) |> arrange(participant_id, n) |>
+  group_by(participant_id) |>
+  mutate(next_county = lead(county), good = back >= UNIT) |> ungroup() |> filter(!is.na(next_county)) |>
+  mutate(stay = next_county == county)
+fb_tab <- fb |> group_by(participant_id, condition, county, good) |> summarise(stay = mean(stay), .groups = "drop") |>
+  group_by(condition, County = if_else(county == "R", "Riverton", "Lakewood"),
+           `Last return` = if_else(good, "$1,000 or more", "under $1,000")) |>
+  summarise(`P(stay), mean (SE)` = paste0(fmt(mean(stay)), " (", fmt(se(stay)), ")"), People = n(), .groups = "drop")
+kable(fb_tab, caption = "Probability of clicking the same county again after a good (≥ $1,000) or bad (< $1,000) return; mean across participants.")
+```
+
+People respond to feedback: they stay with a county more often after a good return than after a bad one, in both counties and both conditions. Table 4 is the raw material for the learning model in the main study (separate learning rates for good and bad news from each county).
+
+## 5. Comprehension and self-reports
+
+```{r comprehension}
+done |> count(`Attempts at the quick check` = tutorial_check_attempts) |>
+  kable(caption = "Attempts needed to pass the 2-question check before the game.")
+done |> count(condition, `Which county brought back more per $1,000?` = pilot_better_county) |>
+  pivot_wider(names_from = condition, values_from = n, values_fill = 0) |>
+  kable(caption = "Post-game question, by condition.")
+```
+
+```{r strategies}
+done |> left_join(select(per, participant_id, share_all), by = "participant_id") |>
+  arrange(condition, share_all) |>
+  transmute(Condition = condition, `Riverton share` = scales::percent(share_all, 1),
+            `How did you decide where to invest?` = coalesce(pilot_decision_strategy, "")) |>
+  kable(caption = "Open-text strategies (optional), sorted by condition and Riverton share.")
+```
+
+## 6. Chat content
+
+```{r chats}
+user_chats <- chats |> filter(!is_system_prompt) |> inner_join(select(done, participant_id, condition), by = "participant_id")
+chat_sum <- user_chats |>
+  mutate(text = str_to_lower(paste(coalesce(message, ""), coalesce(response, ""))),
+         user_words = str_count(coalesce(message, ""), "\\S+")) |>
+  group_by(participant_id, condition) |>
+  summarise(msgs = n(), user_words = sum(user_words),
+            solar = any(str_detect(text, "solar|panel")), energy = any(str_detect(text, "energy|electric|climate|environment")),
+            .groups = "drop")
+chat_sum |> group_by(Condition = condition) |>
+  summarise(People = n(), `Messages, mean` = fmt(mean(msgs), 1), `Words typed, mean` = fmt(mean(user_words), 0),
+            `Mentioned solar or panels` = sum(solar), `Mentioned energy, climate or environment` = sum(energy)) |>
+  kable(caption = "Chat engagement and topics (participant messages and bot replies).")
+```
+
+The treatment chat rarely reaches the product: only `r sum(chat_sum$solar[chat_sum$condition == "treatment"])` of `r sum(chat_sum$condition == "treatment")` treated participants' chats mention solar or panels. The persona prompt is a generic Republican consumer, and nothing in the flow points the conversation at solar.
+
+## 7. Sizing the main study
+
+```{r power}
+sd_all <- tvc$sd_pooled[tvc$Outcome == outcomes["share_all"]]
+sd_10 <- tvc$sd_pooled[tvc$Outcome == outcomes["share_1_10"]]
+n_for <- function(d) ceiling(power.t.test(delta = d, power = 0.8)$n)
+tibble(`Effect (Cohen's d)` = c(0.2, 0.3, 0.4, 0.5)) |>
+  mutate(`People per condition (80% power, two-sided α = .05)` = map_int(`Effect (Cohen's d)`, n_for),
+         `Same effect in Riverton share, all clicks (points)` = round(100 * `Effect (Cohen's d)` * sd_all, 1),
+         `Same effect in Riverton share, clicks 1–10 (points)` = round(100 * `Effect (Cohen's d)` * sd_10, 1)) |>
+  kable(caption = "Sample size per condition by effect size, with each d translated into percentage points of Riverton share using this pilot's pooled SDs.")
+```
+
+The pooled SD of the all-clicks Riverton share is `r fmt(100 * sd_all, 0)` points, so a 10-point treatment effect is d ≈ `r fmt(0.10 / sd_all, 2)` and needs about `r n_for(0.10 / sd_all)` people per condition.
