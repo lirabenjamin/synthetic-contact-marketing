@@ -41,15 +41,11 @@
   .ledger { margin-top: .8rem; font-size: .9rem; font-variant-numeric: tabular-nums; }
   .ledger div { display: flex; justify-content: space-between; }
   .ledger .last { font-weight: 700; }
-  .tiles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: .7rem; min-height: 28px; }
-  .tile { font-size: .78rem; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #fff; border: 1px solid var(--line); color: var(--green); font-variant-numeric: tabular-nums; }
-  .tile.low { color: var(--muted); }
 
   /* cash animation */
   .btn-wrap { position: relative; }
   .cash { position: absolute; left: 50%; top: -.4rem; transform: translateX(-50%); font-size: 2rem; font-weight: 900; color: var(--green); pointer-events: none; white-space: nowrap;
           text-shadow: 0 1px 0 #fff, 0 0 12px rgba(21,128,61,.25); animation: rise 1.1s ease-out forwards; }
-  .cash.low { color: #4b5563; text-shadow: 0 1px 0 #fff; }
   @keyframes rise { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 30% { transform: translate(-50%, -6px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
   body.noanim .cash { animation: none; transform: translate(-50%, -2.6rem); }
 
@@ -92,7 +88,8 @@ const CFG = {
   backD: num('d', 1.00),           // average $ back per $1 invested, Lakewood
   shapeR: num('kr', 2.7),          // noise: SD of one return = mean / sqrt(shape)
   shapeD: num('kd', 2.0),
-  centsPer1kProfit: num('cents', 3), // bonus per $1,000 of profit (money back minus money in)
+  centsPer1kProfit: num('cents', 2.5), // bonus per $1,000 of profit (money back minus money in)
+  maxBonus: num('maxbonus', 1.00),       // bonus cap in dollars
   seed: num('seed', Math.floor(Math.random() * 1e9)),
 };
 const N_INVEST = Math.round(CFG.budget / CFG.unit);
@@ -122,7 +119,8 @@ const S = { screen: 'tut1', check: {}, checkTried: false, log: [], last: null, b
 const invested = c => S.log.filter(v => !c || v.county === c).length * CFG.unit;
 const back = c => S.log.filter(v => !c || v.county === c).reduce((s, v) => s + v.back, 0);
 const profit = () => back() - invested();
-const bonus = () => Math.max(0, profit()) / 1000 * CFG.centsPer1kProfit / 100;
+const bonusFor = pr => Math.min(CFG.maxBonus, Math.max(0, pr) / 1000 * CFG.centsPer1kProfit / 100);
+const bonus = () => bonusFor(profit());
 const $ = x => (x < 0 ? '−$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
 const $s = x => (x >= 0 ? '+' : '') + $(x);
 
@@ -134,7 +132,7 @@ function invest(c) {
     S.busy = false;
     if (S.log.length >= N_INVEST) { S.screen = 'end'; render(); return; }
     document.querySelectorAll('.invest-btn').forEach(b => { b.disabled = false; }); // no re-render, so the cash animation plays out
-  }, SHOT ? 0 : 450);
+  }, SHOT ? 0 : 250);
 }
 
 // --------------------------------- views -----------------------------------
@@ -153,24 +151,23 @@ const views = {
     ${nav(null, "S.screen='tut2';render()")}`,
 
   tut2: () => h`<div class="steps">Instructions 2 of 3</div>
-    <div class="big-emoji">💵</div><h2>Money in, money out</h2>
+    <div class="big-emoji">💵</div><h2>Deciding where to invest</h2>
     <p>Each time you click, you invest ${$(CFG.unit)} in that county, and you see right away how much money came back from sales.</p>
-    <p>Counties differ: in some, ${$(CFG.unit)} brings back more money on average than in others. Either county could be the better one.</p>
-    <p>Any single investment is mostly luck. A good county can bring back little, and a weak county can bring back a lot. To tell which county is better, look at many investments, not one.</p>
-    <p>Each county's average stays the same for the whole game.</p>
+    <p>On average, one county may bring back more money than the other.</p>
+    <p>However, like in the real world, sometimes you'll get lucky and make more money. Others, you will have less luck and earn less.</p>
     ${nav('tut1', "S.screen='tut3';render()")}`,
 
   tut3: () => {
     const qs = [
       { id: 'q1', text: `One ${$(CFG.unit)} investment in a county brought back only $200. Does that mean the county is a bad place to invest?`,
-        opts: ['Yes', 'Not necessarily: one investment is mostly luck'], right: 1 },
-      { id: 'q2', text: 'Does the average amount each county brings back change during the game?', opts: ['Yes, it changes', 'No, it stays the same'], right: 1 },
+        opts: ['Yes', 'Not necessarily: it could have been bad luck'], right: 1 },
+      { id: 'q2', text: 'During the game, can the county that brings back more money on average change?', opts: ['Yes, it can change', 'No, it stays the same'], right: 1 },
     ];
     const ok = qs.every(q => S.check[q.id] === q.right);
     const all = qs.every(q => S.check[q.id] != null);
     return h`<div class="steps">Instructions 3 of 3</div>
     <div class="big-emoji">🎯</div><h2>Your bonus</h2>
-    <p>You earn <b>${CFG.centsPer1kProfit}¢ for every ${$(1000)} of profit</b> (money back minus money invested). The more money comes back, the bigger your bonus.</p>
+    <p>You can earn a bonus of up to a dollar by playing the game. The more money you make on the game, the larger the bonus you can earn (up to a dollar).</p>
     <h2 style="margin-top:1.25rem">Quick check</h2>
     ${qs.map(q => h`<div class="q"><div>${q.text}</div>${q.opts.map((o, i) => `<label><input type="radio" name="${q.id}" ${S.check[q.id] === i ? 'checked' : ''} onchange="S.check.${q.id}=${i};S.checkTried=false;render()"> ${o}</label>`).join('')}
       ${S.checkTried && S.check[q.id] !== q.right ? '<div class="wrong">Not quite. Please read the instructions again.</div>' : ''}</div>`).join('')}
@@ -182,7 +179,7 @@ const views = {
     const card = c => {
       const mine = S.log.filter(v => v.county === c);
       const cash = S.busy && S.last && S.last.county === c
-        ? `<div class="cash ${S.last.back < CFG.unit ? 'low' : ''}">+${$(S.last.back)}</div>` : '';
+        ? `<div class="cash">+${$(S.last.back)}</div>` : '';
       return h`<div class="county">
         <h3>${COUNTY[c].name}</h3><div class="desc">${COUNTY[c].desc}</div>
         <div class="btn-wrap"><button class="invest-btn" ${S.busy || left <= 0 ? 'disabled' : ''} onclick="invest('${c}')">Invest ${$(CFG.unit)} in ${COUNTY[c].short}</button>${cash}</div>
@@ -191,7 +188,6 @@ const views = {
           <div><span>Money back</span><span>${$(back(c))}</span></div>
           <div class="last"><span>Last investment</span><span>${mine.length ? $(mine[mine.length - 1].back) : '–'}</span></div>
         </div>
-        <div class="tiles">${mine.slice(-8).map(v => `<span class="tile ${v.back < CFG.unit ? 'low' : ''}">${$(v.back)}</span>`).join('')}</div>
       </div>`;
     };
     return h`
@@ -222,7 +218,7 @@ function devPanel() {
   return h`<div class="dev"><div><b>Researcher panel</b> (hidden from participants)</div>
     <div>Truth: $1 brings back $${CFG.backR.toFixed(2)} in Riverton, $${CFG.backD.toFixed(2)} in Lakewood</div>
     <div>Noise: one return's SD is ${Math.round(100 / Math.sqrt(CFG.shapeR))}% (R) / ${Math.round(100 / Math.sqrt(CFG.shapeD))}% (D) of its mean</div>
-    <div>All in Riverton: about ${$(CFG.budget * CFG.backR)} back, bonus $${(Math.max(0, CFG.budget * (CFG.backR - 1)) / 1000 * CFG.centsPer1kProfit / 100).toFixed(2)}</div>
+    <div>All in Riverton: about ${$(CFG.budget * CFG.backR)} back, bonus $${bonusFor(CFG.budget * (CFG.backR - 1)).toFixed(2)} (cap $${CFG.maxBonus.toFixed(2)})</div>
     <div>Seed ${CFG.seed} · <a href="${link({ seed: Math.floor(Math.random() * 1e9) })}">new luck</a></div></div>`;
 }
 
