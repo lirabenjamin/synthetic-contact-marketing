@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Participant explorer · allocation-game pilots</title>
+<style>
+  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f3f4f6; --R:#d97706; --D:#0f766e; --T:#2563eb; --C:#9ca3af; --hl:#fef08a; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); font-size: 14px; line-height: 1.45; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #fff; border-bottom: 1px solid var(--line); padding: .6rem 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 1rem; }
+  .tabs button { border: 1px solid var(--line); background: #fff; padding: .35rem .7rem; border-radius: 6px; cursor: pointer; font-size: .85rem; }
+  .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .note { color: var(--muted); font-size: .8rem; flex: 1; min-width: 280px; }
+  main { flex: 1; display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
+  aside { background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .controls { padding: .6rem; border-bottom: 1px solid var(--line); display: grid; gap: .4rem; }
+  .controls input, .controls select { width: 100%; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  .controls .row { display: flex; gap: .4rem; }
+  .list { overflow-y: auto; flex: 1; }
+  .item { padding: .5rem .7rem; border-bottom: 1px solid var(--line); cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: .15rem .5rem; }
+  .item:hover { background: #f9fafb; }
+  .item.on { background: #eef2ff; }
+  .item .id { font-weight: 700; font-family: ui-monospace, monospace; }
+  .item .meta { color: var(--muted); font-size: .78rem; grid-column: 1 / -1; }
+  .mini { height: 6px; display: flex; grid-column: 1 / -1; border-radius: 3px; overflow: hidden; }
+  .mini span { flex: 1; }
+  .badge { font-size: .72rem; padding: .05rem .45rem; border-radius: 999px; color: #fff; align-self: start; }
+  .badge.treatment { background: var(--T); } .badge.control { background: var(--C); }
+  section.detail { overflow-y: auto; padding: 1rem 1.25rem 3rem; min-height: 0; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+  .card h2 { font-size: .95rem; margin-bottom: .5rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip { background: var(--bg); border-radius: 6px; padding: .25rem .55rem; font-size: .82rem; }
+  .chip b { font-variant-numeric: tabular-nums; }
+  .flag { background: #fef3c7; color: #92400e; }
+  .flag.ok { background: #dcfce7; color: #166534; }
+  .quote { border-left: 3px solid var(--line); padding-left: .7rem; margin-top: .5rem; color: #374151; }
+  .quote .lbl { font-size: .75rem; color: var(--muted); display: block; }
+  .strip { display: grid; grid-template-columns: repeat(50, 1fr); gap: 2px; }
+  .tile { height: 18px; border-radius: 2px; position: relative; }
+  .tile.R { background: var(--R); } .tile.D { background: var(--D); }
+  .tile.low { opacity: .45; }
+  .legend { display: flex; gap: 1rem; font-size: .8rem; color: var(--muted); margin: .5rem 0 0; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .3rem; vertical-align: -1px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-size: 11px; fill: var(--muted); }
+  .tip { position: fixed; pointer-events: none; background: var(--ink); color: #fff; font-size: .78rem; padding: .3rem .5rem; border-radius: 6px; display: none; z-index: 9; }
+  .chat { display: flex; flex-direction: column; gap: .45rem; }
+  .msg { max-width: 78%; padding: .5rem .7rem; border-radius: 12px; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: #dbeafe; border-bottom-right-radius: 3px; }
+  .msg.bot { align-self: flex-start; background: #f3f4f6; border-bottom-left-radius: 3px; }
+  .msg .t { display: block; font-size: .68rem; color: var(--muted); margin-top: .2rem; }
+  mark { background: var(--hl); padding: 0 1px; border-radius: 2px; }
+  table.rounds { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .85rem; }
+  table.rounds th, table.rounds td { border-bottom: 1px solid var(--line); padding: .3rem .4rem; text-align: right; }
+  table.rounds th:first-child, table.rounds td:first-child { text-align: left; }
+  .kbd { font-size: .75rem; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } main { grid-template-columns: 260px 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Participant explorer</h1>
+  <div class="tabs" id="tabs"></div>
+  <div class="note" id="note"></div>
+  <div class="kbd">↑ ↓ to move between participants</div>
+</header>
+<main>
+  <aside>
+    <div class="controls">
+      <input id="q" placeholder="Search chats and strategies (e.g. solar, fair, democrat)">
+      <div class="row">
+        <select id="cond"><option value="all">Both conditions</option><option value="treatment">Treatment only</option><option value="control">Control only</option></select>
+        <select id="sort"></select>
+      </div>
+      <div class="kbd" id="count"></div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <section class="detail" id="detail"></section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+// Topic words for the product; plain "energy" is left out because the cats-vs-dogs chats use it for pets
+const TOPIC = /\b(solar|panels?|electric\w*|environment\w*|climate|renewable\w*|utilit(y|ies)|energy (bills?|costs?|efficien\w*|independen\w*)|carbon|emissions?|fossil)\b/gi;
+const PARTY = /\b(democrat\w*|republican\w*|fair\w*|my people|party|liberal\w*|conservative\w*|trump|biden)\b/gi;
+const $ = s => document.querySelector(s);
+const money = x => (x < 0 ? '−$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
+const pct = x => Math.round(100 * x) + '%';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const mark = (s, re) => esc(s).replace(re, m => `<mark>${m}</mark>`);
+const countRe = (s, re) => (String(s || '').match(re) || []).length;
+const tip = $('#tip');
+const showTip = (e, html) => { tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = (e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 12) + 'px'; };
+const hideTip = () => { tip.style.display = 'none'; };
+
+// ---------- derived per-person stats ----------
+for (const d of DATA) for (const p of d.people) {
+  const userText = p.chat.filter(t => t.who === 'user').map(t => t.text).join(' ');
+  const allText = p.chat.map(t => t.text).join(' ');
+  p.userWords = userText.split(/\s+/).filter(Boolean).length;
+  p.topicHits = countRe(allText, TOPIC);
+  p.partyHits = countRe((p.strategy || '') + ' ' + (p.comments || ''), PARTY);
+  p.searchText = (allText + ' ' + (p.strategy || '') + ' ' + (p.comments || '')).toLowerCase();
+  if (d.type === 'bandit') {
+    p.shareR = p.clicks.filter(c => c.c === 'R').length / p.clicks.length;
+    p.share1_10 = p.clicks.slice(0, 10).filter(c => c.c === 'R').length / 10;
+    p.profit = p.clicks.reduce((s, c) => s + c.back, 0) - 1000 * p.clicks.length;
+    const avg = c => { const x = p.clicks.filter(k => k.c === c); return x.length ? x.reduce((s, k) => s + k.back, 0) / x.length : null; };
+    p.avgR = avg('R'); p.avgD = avg('D');
+  } else {
+    p.shareR = p.rounds.reduce((s, r) => s + r.share_R, 0) / p.rounds.length;
+    p.share1_10 = p.rounds.length ? p.rounds[0].share_R : null;
+    p.profit = p.rounds.reduce((s, r) => s + r.rev_R + r.rev_D, 0);
+  }
+}
+
+const SORTS = {
+  bandit: [['shareR', 'Riverton share (low first)'], ['-shareR', 'Riverton share (high first)'], ['profit', 'Profit (low first)'], ['-userWords', 'Words typed in chat'], ['-topicHits', 'Chat mentions of solar/energy'], ['-partyHits', 'Party/fairness words in answers']],
+  slider: [['shareR', 'Mean share to Riverton (low first)'], ['-shareR', 'Mean share to Riverton (high first)'], ['-userWords', 'Words typed in chat'], ['-topicHits', 'Chat mentions of solar/energy']],
+};
+let pilot = DATA[0], view = [], sel = 0;
+
+function tabs() {
+  $('#tabs').innerHTML = DATA.map((d, i) => `<button class="${d === pilot ? 'on' : ''}" data-i="${i}">${esc(d.label)}</button>`).join(' ');
+  $('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => { pilot = DATA[+b.dataset.i]; sel = 0; setup(); });
+}
+
+function setup() {
+  tabs();
+  $('#note').textContent = pilot.note;
+  $('#sort').innerHTML = SORTS[pilot.type].map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  refresh();
+}
+
+function refresh() {
+  const q = $('#q').value.trim().toLowerCase(), cond = $('#cond').value, s = $('#sort').value;
+  const key = s.replace('-', ''), dir = s.startsWith('-') ? -1 : 1;
+  view = pilot.people.filter(p => (cond === 'all' || p.condition === cond) && (!q || p.searchText.includes(q)))
+    .sort((a, b) => dir * ((a[key] ?? -1e9) - (b[key] ?? -1e9)));
+  sel = Math.min(sel, Math.max(0, view.length - 1));
+  $('#count').textContent = `${view.length} of ${pilot.people.length} participants`;
+  $('#list').innerHTML = view.map((p, i) => {
+    const mini = pilot.type === 'bandit'
+      ? p.clicks.map(c => `<span style="background:var(--${c.c})"></span>`).join('')
+      : p.rounds.map(r => `<span style="background:linear-gradient(to right,var(--R) ${pct(r.share_R)},var(--D) ${pct(r.share_R)})"></span>`).join('');
+    return `<div class="item ${i === sel ? 'on' : ''}" data-i="${i}">
+      <span class="id">${p.id}</span><span class="badge ${p.condition}">${p.condition}</span>
+      <div class="mini">${mini}</div>
+      <div class="meta">${pilot.type === 'bandit' ? 'Riverton ' + pct(p.shareR) + ' · profit ' + money(p.profit) : 'mean share to Riverton ' + pct(p.shareR)} · ${p.userWords} words typed${p.topicHits ? ' · ☀️ ' + p.topicHits : ''}${p.partyHits ? ' · ⚠️ party/fair' : ''}</div>
+    </div>`;
+  }).join('');
+  $('#list').querySelectorAll('.item').forEach(el => el.onclick = () => { sel = +el.dataset.i; refresh(); });
+  detail();
+}
+
+// ---------- charts (plain SVG) ----------
+function axes(w, h, m, xMax, yMax, yFmt, yTicks, xTicks) {
+  let g = '';
+  for (const t of yTicks) { const y = m.t + (h - m.t - m.b) * (1 - t / yMax); g += `<line x1="${m.l}" x2="${w - m.r}" y1="${y}" y2="${y}" stroke="#f1f1f1"/><text x="${m.l - 6}" y="${y + 4}" text-anchor="end">${yFmt(t)}</text>`; }
+  for (const t of xTicks) { const x = m.l + (w - m.l - m.r) * (t - 1) / (xMax - 1); g += `<text x="${x}" y="${h - m.b + 16}" text-anchor="middle">${t}</text>`; }
+  return g;
+}
+
+function returnsChart(p) {
+  const w = 760, h = 260, m = { l: 52, r: 12, t: 12, b: 28 };
+  const yMax = Math.max(3500, ...p.clicks.map(c => c.back));
+  const X = n => m.l + (w - m.l - m.r) * (n - 1) / 99, Y = v => m.t + (h - m.t - m.b) * (1 - v / yMax);
+  let g = axes(w, h, m, 100, yMax, v => money(v), [0, 1000, 2000, 3000], [1, 25, 50, 75, 100]);
+  g += `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(1000)}" y2="${Y(1000)}" stroke="#9ca3af" stroke-dasharray="4 3"/>`;
+  for (const c of ['R', 'D']) { // running average of what the person had seen in that county
+    let s = 0, k = 0; const pts = [];
+    for (const cl of p.clicks) if (cl.c === c) { s += cl.back; k++; pts.push(`${X(cl.n)},${Y(s / k)}`); }
+    if (pts.length > 1) g += `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--${c})" stroke-width="2.5" opacity=".9"/>`;
+  }
+  g += p.clicks.map(c => `<circle cx="${X(c.n)}" cy="${Y(c.back)}" r="3.6" fill="var(--${c.c})" fill-opacity=".55" data-tip="Click ${c.n}: ${c.c === 'R' ? 'Riverton' : 'Lakewood'} · ${money(c.back)} back${c.ms != null ? ' · ' + (c.ms / 1000).toFixed(1) + ' s after the last click' : ''}"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}">${g}</svg>`;
+}
+
+function shareChart(p) {
+  const w = 760, h = 200, m = { l: 52, r: 12, t: 12, b: 28 };
+  const X = n => m.l + (w - m.l - m.r) * (n - 1) / 99, Y = v => m.t + (h - m.t - m.b) * (1 - v);
+  let g = axes(w, h, m, 100, 1, v => pct(v), [0, .5, 1], [1, 25, 50, 75, 100]);
+  let k = 0; const pts = p.clicks.map(c => { k += c.c === 'R'; return `${X(c.n)},${Y(k / c.n)}`; });
+  g += `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--R)" stroke-width="2.5"/>`;
+  return `<svg viewBox="0 0 ${w} ${h}">${g}</svg>`;
+}
+
+function sliderChart(p) {
+  const w = 760, h = 240, m = { l: 52, r: 12, t: 12, b: 28 };
+  const n = p.rounds.length, X = r => m.l + (w - m.l - m.r) * (r - 1) / (n - 1), Y = v => m.t + (h - m.t - m.b) * (1 - v);
+  let g = axes(w, h, m, n, 1, v => pct(v), [0, .5, .88, 1], Array.from({ length: n }, (_, i) => i + 1));
+  g += `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(.88)}" y2="${Y(.88)}" stroke="#111827" stroke-dasharray="4 3"/>`;
+  g += `<polyline points="${p.rounds.map(r => `${X(r.round)},${Y(r.share_R)}`).join(' ')}" fill="none" stroke="var(--R)" stroke-width="2.5"/>`;
+  g += p.rounds.map(r => `<circle cx="${X(r.round)}" cy="${Y(r.share_R)}" r="5" fill="var(--R)" data-tip="Round ${r.round}: ${pct(r.share_R)} to Riverton · Riverton ${money(r.rev_R)} on ${money(r.alloc_R)} · Lakewood ${money(r.rev_D)} on ${money(r.alloc_D)}"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}">${g}</svg>`;
+}
+
+// ---------- detail panel ----------
+function detail() {
+  const p = view[sel];
+  if (!p) { $('#detail').innerHTML = '<p class="kbd">No participant matches.</p>'; return; }
+  const chip = (l, v) => `<span class="chip">${l} <b>${v ?? '–'}</b></span>`;
+  const flags = [
+    p.topicHits ? `<span class="chip flag ok">Chat mentions solar/energy/environment ×${p.topicHits}</span>` : `<span class="chip flag">Chat never mentions solar, energy or the environment</span>`,
+    p.partyHits ? `<span class="chip flag">Answers mention party or fairness</span>` : '',
+  ].join('');
+  let game = '';
+  if (pilot.type === 'bandit') {
+    game = `<div class="card"><h2>Every click (top row: clicks 1–50, bottom: 51–100)</h2>
+      <div class="strip">${p.clicks.map(c => `<div class="tile ${c.c}${c.back < 1000 ? ' low' : ''}" data-tip="Click ${c.n}: ${c.c === 'R' ? 'Riverton' : 'Lakewood'} · ${money(c.back)} back"></div>`).join('')}</div>
+      <div class="legend"><span><span class="sw" style="background:var(--R)"></span>Riverton (better on average)</span><span><span class="sw" style="background:var(--D)"></span>Lakewood</span><span>Faded tile: under $1,000 came back</span></div></div>
+      <div class="grid2">
+        <div class="card"><h2>Money back from each click, and the running average this person saw in each county</h2>${returnsChart(p)}
+          <div class="legend"><span>Dots: single clicks · lines: running average per county · dashed: $1,000 (break even)</span></div></div>
+        <div class="card"><h2>Running share of clicks to Riverton</h2>${shareChart(p)}</div>
+      </div>`;
+  } else {
+    game = `<div class="card"><h2>Share of the budget to Riverton, by round (dashed: best split, 88%)</h2>${sliderChart(p)}</div>
+      <div class="card"><h2>Rounds</h2><table class="rounds"><tr><th>Round</th><th>To Riverton</th><th>Riverton spent → back</th><th>Lakewood spent → back</th><th>Riverton $ back per $1</th><th>Lakewood $ back per $1</th></tr>
+      ${p.rounds.map(r => `<tr><td>${r.round}</td><td>${pct(r.share_R)}</td><td>${money(r.alloc_R)} → ${money(r.rev_R)}</td><td>${money(r.alloc_D)} → ${money(r.rev_D)}</td><td>${(r.rev_R / r.alloc_R).toFixed(2)}</td><td>${(r.rev_D / r.alloc_D).toFixed(2)}</td></tr>`).join('')}</table></div>`;
+  }
+  const q = $('#q').value.trim();
+  const re = q ? new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})|${TOPIC.source}`, 'gi') : TOPIC;
+  $('#detail').innerHTML = `
+    <div class="card"><h2>Participant ${p.id} <span class="badge ${p.condition}">${p.condition === 'treatment' ? 'Treatment · Republican bot' : 'Control · cats-vs-dogs bot'}</span></h2>
+      <div class="chips">
+        ${pilot.type === 'bandit' ? chip('Riverton share', pct(p.shareR)) + chip('Riverton, clicks 1–10', pct(p.share1_10)) + chip('Profit', money(p.profit)) + chip('Bonus', p.bonus != null ? '$' + p.bonus.toFixed(2) : null)
+          + chip('Avg back · Riverton', p.avgR != null ? money(p.avgR) : null) + chip('Avg back · Lakewood', p.avgD != null ? money(p.avgD) : null) + chip('Quick-check attempts', p.check_attempts) + chip('Said better county', p.better)
+          : chip('Mean share to Riverton', pct(p.shareR)) + chip('Round 1 share', pct(p.share1_10)) + chip('Bonus', p.bonus != null ? '$' + p.bonus.toFixed(2) : null)}
+        ${chip('Party strength', p.extremity)}${chip('Age', p.age)}${chip('Gender', p.gender)}${chip('Education', p.education)}${chip('Minutes', p.minutes_total)}
+      </div>
+      <div class="chips" style="margin-top:.5rem">${flags}</div>
+      ${p.strategy ? `<div class="quote"><span class="lbl">How did you decide where to invest?</span>${mark(p.strategy, PARTY)}</div>` : ''}
+      ${p.comments ? `<div class="quote"><span class="lbl">Comments</span>${mark(p.comments, PARTY)}</div>` : ''}
+    </div>
+    ${game}
+    <div class="card"><h2>Chat (${p.chat.filter(t => t.who === 'user').length} messages from the participant, ${p.userWords} words)</h2>
+      <div class="chat">${p.chat.map(t => `<div class="msg ${t.who}">${mark(t.text, re)}<span class="t">${t.who === 'user' ? 'Participant' : 'Bot'} · ${esc(t.t.slice(11, 19))}</span></div>`).join('') || '<p class="kbd">No chat logged.</p>'}</div>
+    </div>`;
+  $('#detail').querySelectorAll('[data-tip]').forEach(el => { el.onmousemove = e => showTip(e, el.dataset.tip); el.onmouseleave = hideTip; });
+  $('#detail').scrollTop = 0;
+}
+
+$('#q').oninput = () => { sel = 0; refresh(); };
+$('#cond').onchange = () => { sel = 0; refresh(); };
+$('#sort').onchange = () => { sel = 0; refresh(); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowDown' || e.key === 'j') { sel = Math.min(view.length - 1, sel + 1); refresh(); e.preventDefault(); }
+  if (e.key === 'ArrowUp' || e.key === 'k') { sel = Math.max(0, sel - 1); refresh(); e.preventDefault(); }
+});
+setup();
+</script>
+</body>
+</html>
