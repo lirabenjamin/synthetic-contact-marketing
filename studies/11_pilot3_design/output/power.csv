@@ -1,0 +1,91 @@
+design,shift,outcome,d,n_per_arm,power
+two_counties,0.1,Forecast before play,0.18,50,0.14625
+two_counties,0.1,Forecast before play,0.18,100,0.24625
+two_counties,0.1,Forecast before play,0.18,150,0.3375
+two_counties,0.1,"Republican share, clicks 1-10",0.18,50,0.1275
+two_counties,0.1,"Republican share, clicks 1-10",0.18,100,0.26
+two_counties,0.1,"Republican share, clicks 1-10",0.18,150,0.36125
+two_counties,0.1,"Republican share, clicks 1-20",0.176,50,0.18125
+two_counties,0.1,"Republican share, clicks 1-20",0.176,100,0.225
+two_counties,0.1,"Republican share, clicks 1-20",0.176,150,0.3375
+two_counties,0.1,"Republican share, all 100",0.178,50,0.1575
+two_counties,0.1,"Republican share, all 100",0.178,100,0.22625
+two_counties,0.1,"Republican share, all 100",0.178,150,0.32
+two_counties,0.1,Money back,0.146,50,0.105
+two_counties,0.1,Money back,0.146,100,0.18125
+two_counties,0.1,Money back,0.146,150,0.2275
+two_counties,0.2,Forecast before play,0.393,50,0.49
+two_counties,0.2,Forecast before play,0.393,100,0.79875
+two_counties,0.2,Forecast before play,0.393,150,0.9075
+two_counties,0.2,"Republican share, clicks 1-10",0.39,50,0.49375
+two_counties,0.2,"Republican share, clicks 1-10",0.39,100,0.77375
+two_counties,0.2,"Republican share, clicks 1-10",0.39,150,0.91625
+two_counties,0.2,"Republican share, clicks 1-20",0.389,50,0.51625
+two_counties,0.2,"Republican share, clicks 1-20",0.389,100,0.76375
+two_counties,0.2,"Republican share, clicks 1-20",0.389,150,0.89875
+two_counties,0.2,"Republican share, all 100",0.355,50,0.4075
+two_counties,0.2,"Republican share, all 100",0.355,100,0.69375
+two_counties,0.2,"Republican share, all 100",0.355,150,0.87
+two_counties,0.2,Money back,0.299,50,0.3
+two_counties,0.2,Money back,0.299,100,0.58
+two_counties,0.2,Money back,0.299,150,0.715
+safe_1.10,0.1,Forecast before play,0.202,50,0.16125
+safe_1.10,0.1,Forecast before play,0.202,100,0.28375
+safe_1.10,0.1,Forecast before play,0.202,150,0.4025
+safe_1.10,0.1,"Republican share, clicks 1-10",0.176,50,0.125
+safe_1.10,0.1,"Republican share, clicks 1-10",0.176,100,0.23875
+safe_1.10,0.1,"Republican share, clicks 1-10",0.176,150,0.3525
+safe_1.10,0.1,"Republican share, clicks 1-20",0.175,50,0.13625
+safe_1.10,0.1,"Republican share, clicks 1-20",0.175,100,0.22125
+safe_1.10,0.1,"Republican share, clicks 1-20",0.175,150,0.31625
+safe_1.10,0.1,"Republican share, all 100",0.175,50,0.14125
+safe_1.10,0.1,"Republican share, all 100",0.175,100,0.2125
+safe_1.10,0.1,"Republican share, all 100",0.175,150,0.325
+safe_1.10,0.1,Money back,0.135,50,0.11
+safe_1.10,0.1,Money back,0.135,100,0.1975
+safe_1.10,0.1,Money back,0.135,150,0.20375
+safe_1.10,0.2,Forecast before play,0.407,50,0.53625
+safe_1.10,0.2,Forecast before play,0.407,100,0.8275
+safe_1.10,0.2,Forecast before play,0.407,150,0.945
+safe_1.10,0.2,"Republican share, clicks 1-10",0.411,50,0.545
+safe_1.10,0.2,"Republican share, clicks 1-10",0.411,100,0.80375
+safe_1.10,0.2,"Republican share, clicks 1-10",0.411,150,0.94375
+safe_1.10,0.2,"Republican share, clicks 1-20",0.412,50,0.55
+safe_1.10,0.2,"Republican share, clicks 1-20",0.412,100,0.81875
+safe_1.10,0.2,"Republican share, clicks 1-20",0.412,150,0.935
+safe_1.10,0.2,"Republican share, all 100",0.404,50,0.5125
+safe_1.10,0.2,"Republican share, all 100",0.404,100,0.78125
+safe_1.10,0.2,"Republican share, all 100",0.404,150,0.9375
+safe_1.10,0.2,Money back,0.309,50,0.3
+safe_1.10,0.2,Money back,0.309,100,0.58875
+safe_1.10,0.2,Money back,0.309,150,0.76375
+safe_1.20,0.1,Forecast before play,0.198,50,0.15875
+safe_1.20,0.1,Forecast before play,0.198,100,0.2925
+safe_1.20,0.1,Forecast before play,0.198,150,0.37875
+safe_1.20,0.1,"Republican share, clicks 1-10",0.21,50,0.1675
+safe_1.20,0.1,"Republican share, clicks 1-10",0.21,100,0.35
+safe_1.20,0.1,"Republican share, clicks 1-10",0.21,150,0.4225
+safe_1.20,0.1,"Republican share, clicks 1-20",0.218,50,0.1575
+safe_1.20,0.1,"Republican share, clicks 1-20",0.218,100,0.30125
+safe_1.20,0.1,"Republican share, clicks 1-20",0.218,150,0.47125
+safe_1.20,0.1,"Republican share, all 100",0.198,50,0.17375
+safe_1.20,0.1,"Republican share, all 100",0.198,100,0.25875
+safe_1.20,0.1,"Republican share, all 100",0.198,150,0.4
+safe_1.20,0.1,Money back,0.123,50,0.10375
+safe_1.20,0.1,Money back,0.123,100,0.12125
+safe_1.20,0.1,Money back,0.123,150,0.15875
+safe_1.20,0.2,Forecast before play,0.407,50,0.53625
+safe_1.20,0.2,Forecast before play,0.407,100,0.8375
+safe_1.20,0.2,Forecast before play,0.407,150,0.95
+safe_1.20,0.2,"Republican share, clicks 1-10",0.423,50,0.5425
+safe_1.20,0.2,"Republican share, clicks 1-10",0.423,100,0.84125
+safe_1.20,0.2,"Republican share, clicks 1-10",0.423,150,0.94125
+safe_1.20,0.2,"Republican share, clicks 1-20",0.426,50,0.56125
+safe_1.20,0.2,"Republican share, clicks 1-20",0.426,100,0.85125
+safe_1.20,0.2,"Republican share, clicks 1-20",0.426,150,0.96125
+safe_1.20,0.2,"Republican share, all 100",0.401,50,0.525
+safe_1.20,0.2,"Republican share, all 100",0.401,100,0.83
+safe_1.20,0.2,"Republican share, all 100",0.401,150,0.9225
+safe_1.20,0.2,Money back,0.236,50,0.2125
+safe_1.20,0.2,Money back,0.236,100,0.37
+safe_1.20,0.2,Money back,0.236,150,0.5325
