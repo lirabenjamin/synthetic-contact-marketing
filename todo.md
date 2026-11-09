@@ -165,3 +165,8 @@
 - [ ] Launch calibration pilot on Prolific
 - [ ] Drop raw data into pilots/green-market-game/raw_data.csv
 - [ ] Run 00_clean.r → render analysis.qmd → pick difficulty condition
+
+## 2026-11-08 (Slack) — Lab deck for Stefano's lab: pilots + Bayesian model
+- [x] HTML deck (html-slides skill) with screenshots of both pilots, results showing the null/backfire, and a step-by-step Bayesian learning model ending in condition effects on prior, openness, and the weight on Riverton good news → rebuilt 2026-11-08 with talk-slides standards (no eyebrow tags): `presentations/2026-11-09_lab_pilots/out/lab_pilots_live.html`
+- [x] Add rule to html-slides skill: no small uppercase eyebrow tags, no "·"; research decks use talk-slides
+- [x] (2026-11-08) Deck v2: highlight each equation term as it is explained; learning-rate form (m + α·surprise) and the weighted-average form; worked example (one treated player's first 6 clicks); model fitted to pilot 2 per player (`studies/10_bandit_game_pilot/fit_learner.py`)
