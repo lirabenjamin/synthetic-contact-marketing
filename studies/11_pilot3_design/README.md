@@ -4,8 +4,9 @@
 
 - **Kept:** the 6 GREEN questions about the average Republican, before and after the chat.
 - **Dropped:** the sure-thing option (back to a standard two-armed bandit) and the dollar forecast.
+- **Length:** 50 clicks of $1,000 ($50,000 budget; BenBen, 2026-11-09); bonus $50,000 money back → $0, $67,500 → $1.00.
 - **Options:** "Ads to Republican homeowners" (on average $1.35 back per $1) vs "Ads to all homeowners" (on average $1.00), both with luck. No Democratic option, no counties, no vote shares.
-- **Pay:** $2.00 for 10 minutes as in the earlier pilots (BenBen, 2026-11-08), bonus up to $1.00 (linear from $100,000 to $135,000 money back).
+- **Pay:** $2.00 for 10 minutes as in the earlier pilots (BenBen, 2026-11-08), bonus up to $1.00.
 - **Sample:** 30 via the Wharton Behavioral Lab (Prolific panel), more later if needed.
 - **Live:** https://twins-allocation-game.onrender.com, app tag `v4.0.0-pilot3` (commit a231960), MongoDB `twins-pilot3`. Live end-to-end test passed 2026-11-08.
 
