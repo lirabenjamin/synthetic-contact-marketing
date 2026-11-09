@@ -1,4 +1,17 @@
-# 11 Pilot 3 design: Republican homeowners vs a sure thing (for discussion, 2026-11-08)
+# 11 Pilot 3 design
+
+## Revision after discussion (BenBen, 2026-11-08): what runs
+
+- **Kept:** the 6 GREEN questions about the average Republican, before and after the chat.
+- **Dropped:** the sure-thing option (back to a standard two-armed bandit) and the dollar forecast.
+- **Options:** "Ads to Republican homeowners" (on average $1.35 back per $1) vs "Ads to all homeowners" (on average $1.00), both with luck. No Democratic option, no counties, no vote shares.
+- **Pay:** $2.40 for about 12 minutes, bonus up to $1.00 (linear from $100,000 to $135,000 money back). Consent updated to match.
+- **Sample:** 30 via the Wharton Behavioral Lab (Prolific panel), more later if needed.
+- **Live:** https://twins-allocation-game.onrender.com, app tag `v4.0.0-pilot3` (commit a231960), MongoDB `twins-pilot3`. Live end-to-end test passed 2026-11-08.
+
+The rest of this memo is the original proposal, kept for the record.
+
+## Original proposal: Republican homeowners vs a sure thing (2026-11-07)
 
 Built, tested end to end, **not deployed**. App: `twins/survey-app` (repo lirabenjamin/scrsmg), branch `pilot3-hot-stove`, commit 672bc36. Data would go to MongoDB `twins-pilot3`. Screenshots of every new screen are in `screenshots/`; the design simulation is `simulate.py` (`output/`).
 
